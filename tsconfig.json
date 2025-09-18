@@ -1,0 +1,14 @@
+
+{
+  "compilerOptions": {
+    "target": "ES2020",               
+    "module": "commonjs",             
+    "rootDir": "./src",                // Thư mục gốc chứa mã nguồn .ts
+    "outDir": "./dist",                // Thư mục chứa mã .js sau khi biên dịch
+    "esModuleInterop": true,           // Cho phép tương tác tốt hơn giữa các module
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,                    // Bật tất cả các quy tắc kiểm tra kiểu nghiêm ngặt
+    "skipLibCheck": true               // Bỏ qua việc kiểm tra kiểu của các thư viện
+  },
+  "include": ["src/**/*"]              // Chỉ biên dịch các file trong thư mục src
+}
