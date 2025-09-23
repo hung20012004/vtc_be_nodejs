@@ -1,5 +1,5 @@
 import pool from '../../config/db';
-import { Role } from '../types/roles.type';
+import { Role } from '../types/role.type';
 
 export type CreateRoleInput = Pick<Role, 'name' | 'slug' >;
 

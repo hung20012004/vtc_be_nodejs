@@ -14,7 +14,7 @@ export interface User {
   ward: string | null;
   avatar: string | null;
   status: number; // 0: Chờ kích hoạt, 1: Hoạt động, 2: Bị khóa
-  user_type: number; // 0: Admin, 1: Nhân viên, 2: Khách hàng, 3: Nhà cung cấp
+  user_type: number;
   activated_at: Date | null;
   remember_token: string | null;
   created_at: Date;

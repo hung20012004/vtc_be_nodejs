@@ -1,5 +1,5 @@
 import pool from '../../config/db';
-import { Permission } from '../types/permissions.type';
+import { Permission } from '../types/permission.type';
 
 export type CreatePermissionInput = Pick<Permission, 'name' | 'slug'>;
 

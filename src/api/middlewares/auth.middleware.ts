@@ -34,3 +34,39 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
     return res.status(401).json({ message: 'Token không hợp lệ hoặc đã hết hạn.' });
   }
 };
+
+/**
+ * Middleware để kiểm tra xem vai trò của người dùng có các quyền hạn cần thiết hay không.
+ * @param requiredPermissions - Một mảng các slug của quyền hạn bắt buộc.
+ */
+export const authorize = (...requiredPermissions: string[]) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Chưa xác thực.' });
+    }
+
+    try {
+      // 1. Lấy tất cả các quyền (permissions) mà vai trò (role) của người dùng đang có
+      const userPermissionsQuery = await pool.query(
+        `SELECT p.slug FROM permissions p
+         JOIN permission_role pr ON p.id = pr.permission_id
+         WHERE pr.role_id = $1`,
+        [req.user.role_id]
+      );
+
+      // Lấy ra một mảng các slug, ví dụ: ['manage-users', 'view-products']
+      const userPermissions: string[] = userPermissionsQuery.rows.map(row => row.slug);
+
+      // 2. Kiểm tra xem người dùng có TẤT CẢ các quyền được yêu cầu hay không
+      const hasAllRequiredPermissions = requiredPermissions.every(p => userPermissions.includes(p));
+
+      if (hasAllRequiredPermissions) {
+        next(); // Có đủ quyền, cho phép đi tiếp
+      } else {
+        return res.status(403).json({ message: 'Bạn không có đủ quyền hạn để thực hiện hành động này.' });
+      }
+    } catch (error) {
+      next(error);
+    }
+  };
+};

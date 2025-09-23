@@ -1,48 +1,48 @@
+// src/api/controllers/auth.controller.ts
+
 import { Request, Response, NextFunction } from 'express';
-import pool from '../../config/db';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { env } from '../../config/env'; 
+import { env } from '../../config/env';
+import { findUserByEmail, createUser } from '../models/user.model';
+// import { createActivityLog } from '../models/userActivityLog.model';
 
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Vui lòng cung cấp email và mật khẩu',
-      });
+      return res.status(400).json({ message: 'Vui lòng cung cấp email và mật khẩu' });
     }
 
-    const userQuery = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (userQuery.rows.length === 0) {
+    // Sử dụng model để tìm người dùng
+    const user = await findUserByEmail(email);
+
+    // Gộp 2 lần kiểm tra thành một
+    if (!user || !(await bcrypt.compare(password, user.password!))) {
       return res.status(401).json({ message: 'Email hoặc mật khẩu không chính xác' });
     }
 
-    const user = userQuery.rows[0];
-    const isPasswordCorrect = await bcrypt.compare(password, user.password);
-    if (!isPasswordCorrect) {
-      return res.status(401).json({ message: 'Email hoặc mật khẩu không chính xác' });
-    }
-    
-    const payload = {
-      userId: user.id,
-      roleId: user.role_id,
-    };
+    // // Ghi log hoạt động
+    // await createActivityLog({
+    //   user_id: user.id,
+    //   action: 'login',
+    //   details: 'User logged in successfully.',
+    //   ip: req.ip,
+    //   user_agent: req.get('User-Agent') || null,
+    // });
+
+    // Tạo token
+    const payload = { userId: user.id, roleId: user.role_id };
     const token = (jwt as any).sign(payload, env.JWT_SECRET, {
-      expiresIn: env.JWT_EXPIRES_IN,
-    });
-    
+          expiresIn: env.JWT_EXPIRES_IN,
+        });
+
     res.status(200).json({
       success: true,
       message: 'Đăng nhập thành công',
       token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-      },
+      user: { id: user.id, name: user.name, email: user.email, user_type: user.user_type, role_id: user.role_id },
     });
   } catch (error) {
     next(error);
@@ -54,46 +54,45 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Vui lòng cung cấp đầy đủ tên, email và mật khẩu.' });
+      return res.status(400).json({ message: 'Vui lòng cung cấp đầy đủ thông tin.' });
     }
 
-    const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-    if (existingUser.rows.length > 0) {
-      return res.status(409).json({ message: 'Email đã được sử dụng.' }); // 409 Conflict
+    // Sử dụng model để kiểm tra
+    const existingUser = await findUserByEmail(email);
+    if (existingUser) {
+      return res.status(409).json({ message: 'Email đã được sử dụng.' });
     }
 
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    const newUserQuery = await pool.query(
-      'INSERT INTO users (name, email, password, role_id) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role_id',
-      [name, email, hashedPassword, 2]// Mặc định role_id = 2 (customer
-    );
-    const newUser = newUserQuery.rows[0];
-
-    const payload = {
-      userId: newUser.id,
-      roleId: newUser.role_id,
-    };
-    const token = (jwt as any).sign(payload, env.JWT_SECRET, {
-      expiresIn: env.JWT_EXPIRES_IN,
+    // Sử dụng model để tạo người dùng với các giá trị mặc định
+    const newUser = await createUser({
+      name,
+      email,
+      password: hashedPassword,
+      role_id: 2,         // Mặc định vai trò Khách hàng
+      user_type: 2,       // Mặc định loại người dùng là Khách hàng
+      status: 1,          // Mặc định là Hoạt động
     });
+
+    // Tạo token
+    const payload = { userId: newUser.id, roleId: newUser.role_id };
+    const token = (jwt as any).sign(payload, env.JWT_SECRET, {
+          expiresIn: env.JWT_EXPIRES_IN,
+        });
 
     res.status(201).json({
       success: true,
       message: 'Đăng ký thành công.',
       token,
-      user: {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-      },
+      user: { id: newUser.id, name: newUser.name, email: newUser.email },
     });
   } catch (error) {
     next(error);
   }
 };
 
+// Hàm logout không thay đổi
 export const logout = (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
