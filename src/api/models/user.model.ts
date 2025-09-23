@@ -51,6 +51,50 @@ export const createUser = async (userData: CreateUserInput): Promise<Pick<User, 
   return result.rows[0];
 };
 
-// - updateUser(id, data)
-// - deleteUser(id)
-// - getAllUsers()
+/**
+ * Cập nhật thông tin người dùng theo ID.
+ * @param id - ID người dùng cần cập nhật.
+ * @param data - Các trường cần cập nhật.
+ * @returns Đối tượng người dùng đã cập nhật hoặc null nếu không tìm thấy.
+ */
+export const updateUser = async (
+  id: number,
+  data: Partial<Omit<User, 'id' | 'created_at' | 'updated_at'>>
+): Promise<Omit<User, 'password'> | null> => {
+  const fields = [];
+  const values = [];
+  let idx = 1;
+  for (const key in data) {
+    fields.push(`${key} = $${idx}`);
+    values.push((data as any)[key]);
+    idx++;
+  }
+  if (fields.length === 0) return null;
+  values.push(id);
+  const result = await pool.query(
+    `UPDATE users SET ${fields.join(', ')}, updated_at = NOW() WHERE id = $${idx} RETURNING id, name, email, phone, role_id, address, avatar, status, user_type, created_at, updated_at`,
+    values
+  );
+  return result.rows[0] || null;
+};
+
+/**
+ * Xóa người dùng theo ID.
+ * @param id - ID người dùng cần xóa.
+ * @returns true nếu xóa thành công, false nếu không tìm thấy.
+ */
+export const deleteUser = async (id: number): Promise<boolean> => {
+  const result = await pool.query('DELETE FROM users WHERE id = $1', [id]);
+  return (result.rowCount ?? 0) > 0;
+};
+
+/**
+ * Lấy danh sách tất cả người dùng.
+ * @returns Mảng các đối tượng người dùng (không có password).
+ */
+export const getAllUsers = async (): Promise<Omit<User, 'password'>[]> => {
+  const result = await pool.query(
+    'SELECT id, name, email, phone, role_id, address, avatar, status, user_type, created_at, updated_at FROM users'
+  );
+  return result.rows;
+};
