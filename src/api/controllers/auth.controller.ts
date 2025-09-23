@@ -5,7 +5,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { env } from '../../config/env';
 import { findUserByEmail, createUser } from '../models/user.model';
-// import { createActivityLog } from '../models/userActivityLog.model';
+import { createActivityLog } from '../models/user_activity_logs.model';
 
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -24,13 +24,13 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     }
 
     // // Ghi log hoạt động
-    // await createActivityLog({
-    //   user_id: user.id,
-    //   action: 'login',
-    //   details: 'User logged in successfully.',
-    //   ip: req.ip,
-    //   user_agent: req.get('User-Agent') || null,
-    // });
+    await createActivityLog({
+      user_id: user.id,
+      action: 'login',
+      details: 'User logged in successfully.',
+      ip: req.ip ?? null,
+      user_agent: req.get('User-Agent') ?? null,
+    });
 
     // Tạo token
     const payload = { userId: user.id, roleId: user.role_id };

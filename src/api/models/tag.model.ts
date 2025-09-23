@@ -1,5 +1,5 @@
 import pool from '../../config/db';
-import { Tag } from '../types/tags.type';
+import { Tag } from '../types/tag.type';
 
 export type CreateTagInput = Pick<Tag, 'name' | 'slug'>;
 

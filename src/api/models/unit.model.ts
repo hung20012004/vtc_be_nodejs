@@ -1,5 +1,5 @@
 import pool from '../../config/db';
-import { Unit } from '../types/units.type';
+import { Unit } from '../types/unit.type';
 
 export type CreateUnitInput = Pick<Unit, 'name' | 'symbol'>;
 
