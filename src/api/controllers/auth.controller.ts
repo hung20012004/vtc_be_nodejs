@@ -4,6 +4,7 @@ import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { sendEmail } from '../services/email.service'; 
 import { env } from '../../config/env';
 import { findUserByEmail, createUser } from '../models/user.model';
 import { createActivityLog } from '../models/user_activity_logs.model';
@@ -52,46 +53,52 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 };
 
 export const register = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { name, email, password } = req.body;
+    try {
+        const { name, email, password } = req.body;
+        if (!name || !email || !password) {
+            return res.status(400).json({ message: 'Vui lòng cung cấp đầy đủ thông tin.' });
+        }
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Vui lòng cung cấp đầy đủ thông tin.' });
-    }
+        const existingUser = await UserModel.findUserByEmail(email);
+        if (existingUser) {
+            return res.status(409).json({ message: 'Email đã được sử dụng.' });
+        }
 
-    // Sử dụng model để kiểm tra
-    const existingUser = await findUserByEmail(email);
-    if (existingUser) {
-      return res.status(409).json({ message: 'Email đã được sử dụng.' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Sử dụng model để tạo người dùng với các giá trị mặc định
-    const newUser = await createUser({
-      name,
-      email,
-      password: hashedPassword,
-      role_id: 2,         // Mặc định vai trò Khách hàng
-      user_type: 2,       // Mặc định loại người dùng là Khách hàng
-      status: 1,          // Mặc định là Hoạt động
-    });
-
-    // Tạo token
-    const payload = { userId: newUser.id, roleId: newUser.role_id };
-    const token = (jwt as any).sign(payload, env.JWT_SECRET, {
-          expiresIn: env.JWT_EXPIRES_IN,
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        // 1. Tạo token xác thực
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        
+        // 2. Tạo người dùng với trạng thái "chờ kích hoạt" và token
+        await UserModel.createUser({
+            name,
+            email,
+            password: hashedPassword,
+            role_id: 2,           // Mặc định vai trò Khách hàng
+            user_type: 2,         // Mặc định loại người dùng là Khách hàng
+            status: 0,            // 0 = Chờ kích hoạt
+            verification_token: verificationToken, // Lưu token
+            verification_token_expires: new Date(Date.now() + 15 * 60 * 1000), // Hết hạn sau 15 phút
         });
 
-    res.status(201).json({
-      success: true,
-      message: 'Đăng ký thành công.',
-      token,
-      user: { id: newUser.id, name: newUser.name, email: newUser.email },
-    });
-  } catch (error) {
-    next(error);
-  }
+        // 3. Gửi email xác thực
+        const verificationURL = `${req.protocol}://${req.get('host')}/api/v1/auth/verify-email?token=${verificationToken}`;
+        const emailHtml = `<h1>Xác thực tài khoản của bạn</h1><p>Vui lòng bấm vào link dưới đây để kích hoạt tài khoản:</p><a href="${verificationURL}">Kích hoạt ngay</a>`;
+        
+        await sendEmail({
+            to: email,
+            subject: 'Kích hoạt tài khoản Nông Sản Sạch',
+            html: emailHtml,
+        });
+
+        // 4. Trả về thông báo, KHÔNG trả về token JWT
+        res.status(201).json({
+            success: true,
+            message: 'Đăng ký thành công. Vui lòng kiểm tra email để kích hoạt tài khoản.',
+        });
+    } catch (error) {
+        next(error);
+    }
 };
 
 // Hàm logout không thay đổi
@@ -160,4 +167,26 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
         
         res.status(200).json({ message: 'Mật khẩu đã được cập nhật thành công.' });
     } catch (error) { next(error); }
+};
+
+export const verifyEmail = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { token } = req.query;
+        if (!token) {
+            return res.status(400).send('Token xác thực không hợp lệ hoặc đã hết hạn.');
+        }
+
+        const user = await UserModel.findUserByVerificationToken(token as string);
+        if (!user) {
+            return res.status(400).send('Token xác thực không hợp lệ hoặc đã hết hạn.');
+        }
+        
+        await UserModel.activateUser(user.id);
+        
+        // Chuyển hướng người dùng đến trang đăng nhập hoặc trang thông báo thành công
+        // res.redirect('YOUR_FRONTEND_LOGIN_PAGE_URL');
+        res.status(200).send('<h1>Xác thực email thành công!</h1><p>Bạn có thể đóng trang này và đăng nhập vào ứng dụng.</p>');
+    } catch (error) {
+        next(error);
+    }
 };

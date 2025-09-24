@@ -4,7 +4,13 @@ import pool from '../../config/db';
 import { User } from '../types/user.type';
 
 // Kiểu dữ liệu cho việc tạo người dùng mới, chỉ bao gồm các trường cần thiết khi đăng ký.
-export type CreateUserInput = Pick<User, 'name' | 'email' | 'password' | 'role_id' | 'user_type' | 'status'>;
+export type CreateUserInput = Pick<User, 'name' | 'email' | 'password'> & {
+    role_id?: number;
+    user_type?: number;
+    status?: number;
+    verification_token?: string;
+    verification_token_expires?: Date;
+};
 
 /**
  * Tìm người dùng bằng email. Trả về tất cả các trường.
@@ -39,14 +45,14 @@ export const getAllUsers = async (): Promise<Omit<User, 'password'>[]> => {
  * Tạo người dùng mới.
  */
 export const createUser = async (userData: CreateUserInput): Promise<Pick<User, 'id' | 'name' | 'email' | 'role_id'>> => {
-  const { name, email, password, role_id, user_type, status } = userData;
-  const result = await pool.query(
-    `INSERT INTO users (name, email, password, role_id, user_type, status)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, name, email, role_id`,
-    [name, email, password, role_id, user_type, status]
-  );
-  return result.rows[0];
+    const { name, email, password, role_id, user_type, status, verification_token, verification_token_expires } = userData;
+    const result = await pool.query(
+        `INSERT INTO users (name, email, password, role_id, user_type, status, verification_token, verification_token_expires)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id, name, email, role_id`,
+        [name, email, password, role_id, user_type, status, verification_token, verification_token_expires]
+    );
+    return result.rows[0];
 };
 
 /**
@@ -91,4 +97,17 @@ export const softDeleteUser = async (id: number): Promise<boolean> => {
         [id]
     );
     return (result.rowCount ?? 0) > 0;
+};
+// Thêm hàm mới để tìm user bằng token
+export const findUserByVerificationToken = async (token: string) => {
+    const result = await pool.query('SELECT * FROM users WHERE verification_token = $1 AND verification_token_expires > NOW()', [token]);
+    return result.rows[0] || null;
+};
+
+// Thêm hàm mới để kích hoạt tài khoản
+export const activateUser = async (id: number) => {
+    await pool.query(
+        'UPDATE users SET status = 1, email_verified_at = NOW(), verification_token = NULL, verification_token_expires = NULL WHERE id = $1',
+        [id]
+    );
 };

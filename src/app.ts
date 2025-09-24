@@ -30,6 +30,7 @@ import shippingCarrierRouter from './api/routes/shipping.route';
 import tokenRouter from './api/routes/token.route';
 import reviewRouter from './api/routes/review.route';
 import userRouter from './api/routes/user.route';
+import uploadRouter from './api/routes/upload.route';
 const app = express();
 
 app.use(cors()); 
@@ -62,6 +63,7 @@ app.use('/api/v1/shipping-carriers', shippingCarrierRouter);
 app.use('/api/v1/tokens', tokenRouter);
 app.use('/api/v1/reviews', reviewRouter);
 app.use('/api/v1/users', userRouter);
+app.use('/api/v1/upload', uploadRouter);
 
 app.get('/', (req, res) => {
   res.send('Server is alive and kicking!');
