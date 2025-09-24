@@ -17,7 +17,7 @@ import wishlistRouter from './api/routes/wishlist.route';
 import cartRouter from './api/routes/cart.route';
 import notificationRouter from './api/routes/notification.route';
 import supplierRouter from './api/routes/supplier.route';
-import inventoryRouter from './api/routes/inventoryImport.route';
+import inventoryRouter from './api/routes/inventory.route';
 import couponRouter from './api/routes/coupon.route';
 import bannerRouter from './api/routes/banner.route';
 import contactRouter from './api/routes/contact.route';
@@ -25,8 +25,11 @@ import reportRouter from './api/routes/report.route';
 import failedJobRouter from './api/routes/failedJob.route';
 import postRouter from './api/routes/post.route';
 import faqRouter from './api/routes/faq.route';
-
-
+import settingRouter from './api/routes/setting.route';
+import shippingCarrierRouter from './api/routes/shipping.route';
+import tokenRouter from './api/routes/token.route';
+import reviewRouter from './api/routes/review.route';
+import userRouter from './api/routes/user.route';
 const app = express();
 
 app.use(cors()); 
@@ -54,6 +57,11 @@ app.use('/api/v1/reports', reportRouter);
 app.use('/api/v1/failed-jobs', failedJobRouter);
 app.use('/api/v1/posts', postRouter);
 app.use('/api/v1/faqs', faqRouter);
+app.use('/api/v1/settings', settingRouter);
+app.use('/api/v1/shipping-carriers', shippingCarrierRouter);
+app.use('/api/v1/tokens', tokenRouter);
+app.use('/api/v1/reviews', reviewRouter);
+app.use('/api/v1/users', userRouter);
 
 app.get('/', (req, res) => {
   res.send('Server is alive and kicking!');

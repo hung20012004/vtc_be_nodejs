@@ -1,5 +1,18 @@
 // src/api/types/product.type.ts
-
+export interface ProductVariant {
+  id: number;
+  product_id: number;
+  name: string;
+  sku: string | null;
+  price: number;
+  cost_price: number | null;
+  stock_quantity: number;
+  weight: number | null;
+  image: string | null;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
 export interface Product {
   id: number;
   name: string;
@@ -34,4 +47,5 @@ export interface Product {
   updated_at: Date;
   deleted_at: Date | null;
   search_vector: string | null;
+  variants?: ProductVariant[];
 }

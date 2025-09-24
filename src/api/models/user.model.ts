@@ -72,3 +72,23 @@ export const deleteUser = async (id: number): Promise<boolean> => {
   const result = await pool.query('DELETE FROM users WHERE id = $1', [id]);
   return (result.rowCount ?? 0) > 0;
 };
+/**
+ * Cập nhật mật khẩu của người dùng bằng email.
+ */
+export const updatePasswordByEmail = async (email: string, hashedPassword: string): Promise<boolean> => {
+    const result = await pool.query(
+        'UPDATE users SET password = $1 WHERE email = $2',
+        [hashedPassword, email]
+    );
+    return (result.rowCount ?? 0) > 0;
+};
+/**
+ * Xóa mềm người dùng bằng cách cập nhật trường `deleted_at`.
+ */
+export const softDeleteUser = async (id: number): Promise<boolean> => {
+    const result = await pool.query(
+        'UPDATE users SET deleted_at = NOW(), status = 2 WHERE id = $1 AND deleted_at IS NULL', // status = 2: Bị khóa
+        [id]
+    );
+    return (result.rowCount ?? 0) > 0;
+};
