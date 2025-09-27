@@ -10,6 +10,8 @@ import { findUserByEmail, createUser } from '../models/user.model';
 import { createActivityLog } from '../models/user_activity_logs.model';
 import * as UserModel from '../models/user.model';
 import * as ResetTokenModel from '../models/password_reset.model';
+import pool from '../../config/db';
+
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
@@ -70,7 +72,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         const verificationToken = crypto.randomBytes(32).toString('hex');
         
         // 2. Tạo người dùng với trạng thái "chờ kích hoạt" và token
-        await UserModel.createUser({
+        const newUser = await UserModel.createUser({
             name,
             email,
             password: hashedPassword,
@@ -80,6 +82,14 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
             verification_token: verificationToken, // Lưu token
             verification_token_expires: new Date(Date.now() + 15 * 60 * 1000), // Hết hạn sau 15 phút
         });
+        
+        // --- TẠO CUSTOMER NGAY SAU KHI TẠO USER ---
+        const customer_id = newUser.id; // lấy id của user vừa tạo
+        await pool.query(
+            `INSERT INTO customers (id, name, email, phone) VALUES ($1, $2, $3, $4)`,
+            [customer_id, name, email, '0335556124']
+        );
+        console.log('New customer_id:', customer_id);
 
         // 3. Gửi email xác thực
         const verificationURL = `${req.protocol}://${req.get('host')}/api/v1/auth/verify-email?token=${verificationToken}`;
