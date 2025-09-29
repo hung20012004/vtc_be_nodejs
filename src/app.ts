@@ -31,6 +31,7 @@ import tokenRouter from './api/routes/token.route';
 import reviewRouter from './api/routes/review.route';
 import userRouter from './api/routes/user.route';
 import uploadRouter from './api/routes/upload.route';
+import orderRouter from './api/routes/order.route';
 const app = express();
 
 app.use(cors()); 
@@ -63,6 +64,7 @@ app.use('/api/v1/shipping-carriers', shippingCarrierRouter);
 app.use('/api/v1/tokens', tokenRouter);
 app.use('/api/v1/reviews', reviewRouter);
 app.use('/api/v1/users', userRouter);
+app.use('/api/v1/orders', orderRouter);
 app.use('/api/v1/uploads', uploadRouter);
 
 app.get('/', (req, res) => {
