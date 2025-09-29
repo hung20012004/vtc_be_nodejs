@@ -64,8 +64,8 @@ app.use('/api/v1/shipping-carriers', shippingCarrierRouter);
 app.use('/api/v1/tokens', tokenRouter);
 app.use('/api/v1/reviews', reviewRouter);
 app.use('/api/v1/users', userRouter);
-app.use('/api/v1/upload', uploadRouter);
 app.use('/api/v1/orders', orderRouter);
+app.use('/api/v1/uploads', uploadRouter);
 
 app.get('/', (req, res) => {
   res.send('Server is alive and kicking!');
