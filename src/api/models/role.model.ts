@@ -1,7 +1,7 @@
 import pool from '../../config/db';
 import { Role } from '../types/role.type';
 
-export type CreateRoleInput = Pick<Role, 'name' | 'slug' >;
+export type CreateRoleInput = Pick<Role, 'name' | 'slug' | 'description'>;
 
 /**
  * Tìm kiếm role theo ID.
@@ -23,10 +23,10 @@ export const getAllRoles = async (): Promise<Role[]> => {
  * Tạo role mới.
  */
 export const createRole = async (data: CreateRoleInput): Promise<Role> => {
-  const { name, slug } = data;
+  const { name, slug, description } = data;
   const result = await pool.query(
-    `INSERT INTO roles (name, slug) VALUES ($1, $2, $3) RETURNING *`,
-    [name, slug]
+    `INSERT INTO roles (name, slug, description) VALUES ($1, $2, $3) RETURNING *`,
+    [name, slug, description]
   );
   return result.rows[0];
 };
