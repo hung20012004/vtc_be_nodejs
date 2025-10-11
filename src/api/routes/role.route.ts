@@ -1,4 +1,3 @@
-
 import express from 'express';
 import * as RoleController from '../controllers/role.controller';
 import * as PermissionRoleController from '../controllers/permissionRole.controller';
@@ -6,26 +5,21 @@ import { protect, authorize } from '../middlewares/auth.middleware';
 
 const router = express.Router();
 
-// Tất cả các route bên dưới đều được bảo vệ và yêu cầu quyền admin
+// --- Các route GET (không bảo vệ) ---
+router.get('/', RoleController.getAllRoles);
+router.get('/:id', RoleController.getRoleById);
+router.get('/:roleId/permissions', PermissionRoleController.getPermissionsForRole);
+
+// --- Các route cần bảo vệ ---
 router.use(protect, authorize('manage-roles'));
 
-// Các route CRUD cho role
-router.route('/')
-  .get(RoleController.getAllRoles)
-  .post(RoleController.createRole);
+// CRUD cho role (trừ GET)
+router.post('/', RoleController.createRole);
+router.patch('/:id', RoleController.updateRole);
+router.delete('/:id', RoleController.deleteRole);
 
-router.route('/:id')
-  .get(RoleController.getRoleById)
-  .patch(RoleController.updateRole)
-  .delete(RoleController.deleteRole);
-
-// --- CÁC ROUTE MỚI ĐỂ QUẢN LÝ PERMISSION CỦA ROLE ---
-
-router.route('/:roleId/permissions')
-    .get(PermissionRoleController.getPermissionsForRole)
-    .post(PermissionRoleController.assignPermission);
-
+// Quản lý permission của role (trừ GET)
+router.post('/:roleId/permissions', PermissionRoleController.assignPermission);
 router.delete('/:roleId/permissions/:permissionId', PermissionRoleController.revokePermission);
-
 
 export default router;
