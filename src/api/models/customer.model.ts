@@ -41,3 +41,10 @@ export const deleteCustomer = async (id: number): Promise<boolean> => {
   const result = await pool.query('UPDATE customers SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL', [id]);
   return (result.rowCount ?? 0) > 0;
 };
+/**
+ * Tìm một khách hàng bằng user_id của họ.
+ */
+export const findCustomerByUserId = async (userId: number): Promise<Customer | null> => {
+    const result = await pool.query('SELECT * FROM customers WHERE user_id = $1', [userId]);
+    return result.rows.length > 0 ? result.rows[0] : null;
+};

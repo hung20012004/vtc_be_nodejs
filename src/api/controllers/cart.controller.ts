@@ -2,6 +2,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as CartModel from '../models/cart.model';
 import { User } from '../types/user.type';
+import * as CustomerModel from '../models/customer.model';
 
 export const getCart = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -17,11 +18,23 @@ export const addItem = async (req: Request, res: Response, next: NextFunction) =
     try {
         const user = req.user as User;
         const { productId, variantId, quantity } = req.body;
+
         if (!productId || !quantity || quantity < 1) {
             return res.status(400).json({ message: 'Vui lòng cung cấp productId và quantity hợp lệ.' });
         }
-        await CartModel.addOrUpdateItem({ customerId: user.id, productId, variantId, quantity });
-        const cartItems = await CartModel.getCartByCustomerId(user.id);
+        const customer = await CustomerModel.findCustomerByUserId(user.id);
+        if (!customer) {
+            return res.status(403).json({ message: 'Hành động này chỉ dành cho khách hàng.' });
+        }
+        await CartModel.addOrUpdateItem({ 
+            customerId: customer.id, 
+            productId, 
+            variantId, 
+            quantity 
+        });
+
+        const cartItems = await CartModel.getCartByCustomerId(customer.id); // <-- Dùng ID từ bảng customers
+        
         res.status(200).json({ message: 'Cập nhật giỏ hàng thành công.', data: cartItems });
     } catch (error) {
         next(error);
