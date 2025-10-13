@@ -1,4 +1,10 @@
 // src/api/types/product.type.ts
+
+export interface ProductImageSet {
+    thumbnail: string;  // Ảnh đại diện chính
+    gallery: string[];  // Một mảng các URL ảnh khác
+}
+
 export interface ProductVariant {
   id: number;
   product_id: number;
@@ -8,11 +14,12 @@ export interface ProductVariant {
   cost_price: number | null;
   stock_quantity: number;
   weight: number | null;
-  image: string | null;
+  image: string | null; // <-- Ảnh cho riêng phiên bản này
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
 }
+
 export interface Product {
   id: number;
   name: string;
@@ -22,8 +29,8 @@ export interface Product {
   unit_id: number;
   description: string | null;
   short_description: string | null;
-  specifications: Record<string, any> | null; // JSONB
-  images: Record<string, any> | null; // JSONB
+  specifications: Record<string, any> | null;
+  images: ProductImageSet | null; // <-- Sử dụng kiểu dữ liệu mới, rõ ràng hơn
   price: number;
   compare_price: number | null;
   cost_price: number | null;

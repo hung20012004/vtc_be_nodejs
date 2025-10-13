@@ -45,7 +45,6 @@ export const getProductById = async (req: Request, res: Response, next: NextFunc
 export const createProduct = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const user = req.user as User;
-        // Sử dụng model CRUD
         const newProduct = await ProductModel.createProduct(req.body, user.id);
         await createActivityLog({
             user_id: user.id, action: 'create-product',
