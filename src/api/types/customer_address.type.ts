@@ -3,10 +3,12 @@ export interface CustomerAddress {
   customer_id: number;
   name: string;
   phone: string;
-  address: string;
+  address: string; // Địa chỉ chi tiết (số nhà, tên đường)
   province_code: string | null;
   district_code: string | null;
   ward_code: string | null;
+  latitude: number | null;    
+  longitude: number | null;   
   is_default: boolean;
   created_at: Date;
   updated_at: Date;
