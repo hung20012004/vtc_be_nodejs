@@ -25,7 +25,7 @@ export const findUserByEmail = async (email: string): Promise<User | null> => {
  */
 export const findUserById = async (id: number): Promise<Omit<User, 'password'> | null> => {
   const result = await pool.query(
-    'SELECT id, name, email, phone, role_id, address, avatar, status, user_type, created_at, updated_at FROM users WHERE id = $1',
+    'SELECT id, name, email, phone, role_id, avatar, status, user_type, created_at, updated_at FROM users WHERE id = $1',
     [id]
   );
   return result.rows.length > 0 ? result.rows[0] : null;
@@ -36,7 +36,7 @@ export const findUserById = async (id: number): Promise<Omit<User, 'password'> |
  */
 export const getAllUsers = async (): Promise<Omit<User, 'password'>[]> => {
   const result = await pool.query(
-    'SELECT id, name, email, phone, role_id, address, avatar, status, user_type, created_at, updated_at FROM users'
+    'SELECT id, name, email, phone, role_id, avatar, status, user_type, created_at, updated_at FROM users'
   );
   return result.rows;
 };
