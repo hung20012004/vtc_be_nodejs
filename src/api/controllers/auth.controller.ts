@@ -11,7 +11,7 @@ import { createActivityLog } from '../models/user_activity_logs.model';
 import * as UserModel from '../models/user.model';
 import * as ResetTokenModel from '../models/password_reset.model';
 import pool from '../../config/db';
-
+import * as CustomerModel from '../models/customer.model'; 
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password } = req.body;
@@ -55,8 +55,11 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
 };
 
 export const register = async (req: Request, res: Response, next: NextFunction) => {
+    // Lấy một kết nối riêng từ pool để quản lý transaction
+    const client = await pool.connect();
+
     try {
-        const { name, email, password } = req.body;
+        const { name, email, password, phone } = req.body; // Thêm 'phone' nếu có
         if (!name || !email || !password) {
             return res.status(400).json({ message: 'Vui lòng cung cấp đầy đủ thông tin.' });
         }
@@ -66,12 +69,13 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
             return res.status(409).json({ message: 'Email đã được sử dụng.' });
         }
 
+        // Bắt đầu TRANSACTION
+        await client.query('BEGIN');
+
         const hashedPassword = await bcrypt.hash(password, 10);
-        
-        // 1. Tạo token xác thực
         const verificationToken = crypto.randomBytes(32).toString('hex');
         
-        // 2. Tạo người dùng với trạng thái "chờ kích hoạt" và token
+        // 1. Tạo user BÊN TRONG TRANSACTION
         const newUser = await UserModel.createUser({
             name,
             email,
@@ -79,19 +83,23 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
             role_id: 2,           // Mặc định vai trò Khách hàng
             user_type: 2,         // Mặc định loại người dùng là Khách hàng
             status: 0,            // 0 = Chờ kích hoạt
-            verification_token: verificationToken, // Lưu token
-            verification_token_expires: new Date(Date.now() + 15 * 60 * 1000), // Hết hạn sau 15 phút
-        });
-        
-        // --- TẠO CUSTOMER NGAY SAU KHI TẠO USER ---
-        const customer_id = newUser.id; // lấy id của user vừa tạo
-        await pool.query(
-            `INSERT INTO customers (id, name, email, phone) VALUES ($1, $2, $3, $4)`,
-            [customer_id, name, email, '0335556124']
-        );
-        console.log('New customer_id:', customer_id);
+            verification_token: verificationToken,
+            verification_token_expires: new Date(Date.now() + 15 * 60 * 1000),
+        }, client); // <-- Truyền client vào đây
 
-        // 3. Gửi email xác thực
+        // 2. Tạo customer BÊN TRONG TRANSACTION
+        await CustomerModel.createCustomer({
+            name: newUser.name,
+            email: newUser.email,
+            phone: phone || null, // Lấy sđt từ request hoặc để null
+            address: null,        // Địa chỉ có thể cập nhật sau
+            user_id: newUser.id,  // Liên kết với user vừa tạo
+        }, client); // <-- Truyền client vào đây
+
+        // Nếu tất cả thành công, xác nhận TRANSACTION
+        await client.query('COMMIT');
+
+        // 3. Gửi email xác thực (chỉ thực hiện sau khi transaction thành công)
         const verificationURL = `${req.protocol}://${req.get('host')}/api/v1/auth/verify-email?token=${verificationToken}`;
         const emailHtml = `<h1>Xác thực tài khoản của bạn</h1><p>Vui lòng bấm vào link dưới đây để kích hoạt tài khoản:</p><a href="${verificationURL}">Kích hoạt ngay</a>`;
         
@@ -101,13 +109,17 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
             html: emailHtml,
         });
 
-        // 4. Trả về thông báo, KHÔNG trả về token JWT
         res.status(201).json({
             success: true,
             message: 'Đăng ký thành công. Vui lòng kiểm tra email để kích hoạt tài khoản.',
         });
     } catch (error) {
+        // Nếu có bất kỳ lỗi nào, HỦY BỎ TRANSACTION
+        await client.query('ROLLBACK');
         next(error);
+    } finally {
+        // Luôn luôn giải phóng kết nối về lại pool
+        client.release();
     }
 };
 

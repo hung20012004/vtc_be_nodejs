@@ -2,7 +2,7 @@
 
 import pool from '../../config/db';
 import { Customer } from '../types/customer.type';
-
+import { PoolClient } from 'pg';
 export type CreateCustomerInput = Pick<Customer, 'name' | 'phone' | 'email' | 'address'>;
 export type UpdateCustomerInput = Partial<CreateCustomerInput>;
 
@@ -16,13 +16,14 @@ export const findCustomerById = async (id: number): Promise<Omit<Customer, 'pass
   return result.rows.length > 0 ? result.rows[0] : null;
 };
 
-export const createCustomer = async (data: CreateCustomerInput): Promise<Customer> => {
-  const { name, phone, email, address } = data;
-  const result = await pool.query(
-    'INSERT INTO customers (name, phone, email, address) VALUES ($1, $2, $3, $4) RETURNING *',
-    [name, phone, email, address]
-  );
-  return result.rows[0];
+export const createCustomer = async (data: CreateCustomerInput & { user_id: number }, client?: PoolClient): Promise<Customer> => {
+    const db = client || pool;
+    const { name, phone, email, address, user_id } = data;
+    const result = await db.query(
+        'INSERT INTO customers (name, phone, email, address, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [name, phone, email, address, user_id]
+    );
+    return result.rows[0];
 };
 
 export const updateCustomer = async (id: number, data: UpdateCustomerInput): Promise<Omit<Customer, 'password'> | null> => {

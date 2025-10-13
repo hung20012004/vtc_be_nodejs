@@ -2,7 +2,7 @@
 
 import pool from '../../config/db';
 import { User } from '../types/user.type';
-
+import { PoolClient } from 'pg';
 // Kiểu dữ liệu cho việc tạo người dùng mới, chỉ bao gồm các trường cần thiết khi đăng ký.
 export type CreateUserInput = Pick<User, 'name' | 'email' | 'password'> & {
     role_id?: number;
@@ -44,14 +44,20 @@ export const getAllUsers = async (): Promise<Omit<User, 'password'>[]> => {
 /**
  * Tạo người dùng mới.
  */
-export const createUser = async (userData: CreateUserInput): Promise<Pick<User, 'id' | 'name' | 'email' | 'role_id'>> => {
+export const createUser = async (userData: CreateUserInput, client?: PoolClient): Promise<Pick<User, 'id' | 'name' | 'email' | 'role_id'>> => {
+    // 2. Dùng client nếu được cung cấp, nếu không thì dùng pool chung
+    const db = client || pool;
+
     const { name, email, password, role_id, user_type, status, verification_token, verification_token_expires } = userData;
-    const result = await pool.query(
+    
+    // 3. Sử dụng 'db' thay vì 'pool' để thực hiện query
+    const result = await db.query(
         `INSERT INTO users (name, email, password, role_id, user_type, status, verification_token, verification_token_expires)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id, name, email, role_id`,
         [name, email, password, role_id, user_type, status, verification_token, verification_token_expires]
     );
+    
     return result.rows[0];
 };
 
