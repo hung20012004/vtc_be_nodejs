@@ -1,6 +1,5 @@
-// src/api/controllers/productVariant.controller.ts
 import { Request, Response, NextFunction } from 'express';
-import * as VariantModel from '../models/product_variant.model';
+import * as VariantModel from '../models/product_variant.model'; // Đã sửa tên model cho đúng
 import { User } from '../types/user.type';
 import { createActivityLog } from '../models/user_activity_logs.model';
 
@@ -15,6 +14,7 @@ export const getVariantsForProduct = async (req: Request, res: Response, next: N
 export const createVariant = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const productId = parseInt(req.params.productId, 10);
+        // req.body sẽ tự động chứa cả length, width, height nếu frontend gửi lên
         const newVariant = await VariantModel.create(productId, req.body);
         const user = req.user as User;
         await createActivityLog({

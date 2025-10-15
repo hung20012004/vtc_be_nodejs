@@ -16,8 +16,6 @@ router.route('/:id')
   .patch(CustomerController.updateCustomer)
   .delete(CustomerController.deleteCustomer);
 
-// Route cho quản lý địa chỉ của một khách hàng (chỉ admin hoặc chính khách hàng đó)
-// Chúng ta sẽ cần một middleware mới để kiểm tra quyền sở hữu
 router.route('/:customerId/addresses')
     .get(AddressController.getCustomerAddresses)
     .post(AddressController.addCustomerAddress);

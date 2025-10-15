@@ -14,6 +14,9 @@ export interface ProductVariant {
   cost_price: number | null;
   stock_quantity: number;
   weight: number | null;
+  height: number | null;
+  length: number | null;
+  width: number | null;
   image: string | null; // <-- Ảnh cho riêng phiên bản này
   is_active: boolean;
   created_at: Date;

@@ -1,319 +1,105 @@
-// src/api/controllers/order.controller.ts
-
 import { Request, Response, NextFunction } from 'express';
-import * as OrderModel from '../models/order.model';
-import { createActivityLog } from '../models/user_activity_logs.model';
-import { User } from '../types/user.type';
 import pool from '../../config/db';
+import * as OrderModel from '../models/order.model';
+import * as CustomerModel from '../models/customer.model';
+import { User } from '../types/user.type';
+import { ShippingService } from '../services/shipping.service';
 
-// -------------------- ADMIN / GLOBAL --------------------
+const shippingService = new ShippingService();
 
-export const getAllOrders = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const orders = await OrderModel.getAllOrders();
-    res.status(200).json(orders);
-  } catch (error) {
-    next(error);
-  }
+// --- THÔNG TIN KHO HÀNG CỦA BẠN ---
+// Trong thực tế, bạn nên lưu thông tin này trong database và truy vấn ra.
+const SHOP_INFO = {
+    shop_id: 197598, // Shop ID của bạn từ GHN
+    from_name: "FruitApp - Nông sản sạch",
+    from_phone: "0335556124",
+    from_address: "Số 1 Đại Cồ Việt, Bách Khoa",
+    from_ward_name: "Bách Khoa",
+    from_district_name: "Hai Bà Trưng",
+    from_province_name: "Hà Nội"
 };
 
-export const getOrderById = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const id = parseInt(req.params.id, 10);
+export const placeOrder = async (req: Request, res: Response, next: NextFunction) => {
+    const client = await pool.connect();
+    try {
+        const user = req.user as User;
+        const customer = await CustomerModel.findCustomerByUserId(user.id);
+        if (!customer) {
+            return res.status(403).json({ message: 'Không tìm thấy thông tin khách hàng.' });
+        }
 
-    // Validate ID
-    if (isNaN(id)) {
-      return res.status(400).json({ message: 'ID đơn hàng không hợp lệ.' });
-    }
+        await client.query('BEGIN');
 
-    const order = await OrderModel.findOrderById(id);
+        const { newOrder, orderItems, shippingAddress, totalWeight, totalValue } = await OrderModel.placeOrder(customer.id, req.body, client);
+        
+        // =========================================================================
+        // === PAYLOAD CHÍNH XÁC THEO TÀI LIỆU API GHN ===
+        // =========================================================================
+        const ghnOrderPayload = {
+            // Thông tin người nhận
+            to_name: shippingAddress.name,
+            to_phone: shippingAddress.phone,
+            to_address: shippingAddress.address,
+            to_ward_name: shippingAddress.ward_name,
+            to_district_name: shippingAddress.district_name,
+            to_province_name: shippingAddress.province_name,
 
-    if (!order) {
-      return res.status(404).json({ message: 'Không tìm thấy đơn hàng.' });
-    }
-
-    res.status(200).json(order);
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const createOrder = async (req: Request, res: Response, next: NextFunction) => {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    // 1. Tính subtotal từ items
-    let subtotal = 0;
-    if (req.body.items && Array.isArray(req.body.items)) {
-      subtotal = req.body.items.reduce(
-        (sum: number, item: any) => sum + item.quantity * item.unit_price,
-        0
-      );
-    }
-
-    const total_amount =
-      subtotal +
-      (req.body.shipping_fee || 0) -
-      (req.body.discount_amount || 0) +
-      (req.body.tax_amount || 0);
-
-    // 2. Tạo order
-    const orderResult = await client.query(
-      `INSERT INTO orders 
-      (order_code, customer_id, order_date, order_status, total_amount,
-       subtotal, shipping_fee, discount_amount, tax_amount, shipping_address,
-       customer_name, customer_phone, customer_email, created_by, created_at, updated_at)
-      VALUES ($1,$2,NOW(),$3,$4,
-              $5,$6,$7,$8,$9,
-              $10,$11,$12,$13,NOW(),NOW())
-      RETURNING *`,
-      [
-        req.body.order_code,
-        req.body.customer_id || null,
-        "Đang kiểm tra hàng", // mặc định
-        total_amount,
-        subtotal,
-        req.body.shipping_fee || 0,
-        req.body.discount_amount || 0,
-        req.body.tax_amount || 0,
-        req.body.shipping_address || null,
-        req.body.customer_name || null,
-        req.body.customer_phone || null,
-        req.body.customer_email || null,
-        (req.user as any)?.id || null,
-      ]
-    );
-
-    const newOrder = orderResult.rows[0];
-
-    // 3. Thêm order_items
-    if (req.body.items && Array.isArray(req.body.items)) {
-      for (const item of req.body.items) {
+            // Thông tin người gửi (Lấy từ cấu hình shop)
+            ...SHOP_INFO,
+            
+            // Thông tin gói hàng
+            weight: totalWeight,
+            length: 30, // Kích thước đóng gói mặc định
+            width: 20,
+            height: 15,
+            
+            // Thông tin dịch vụ và thanh toán
+            service_id: req.body.shippingOption.service_id,
+            service_type_id: req.body.shippingOption.service_type_id,
+            payment_type_id: 2,
+            cod_amount: newOrder.payment_method === 'cod' ? newOrder.total_amount : 0,
+            required_note: "CHOXEMHANGKHONGTHU",
+            note: newOrder.notes || "",
+            
+            // Mã đơn hàng của bạn để đối soát
+            client_order_code: newOrder.order_number,
+            
+            content: `Thanh toán đơn hàng ${newOrder.order_number} cho FruitApp.`,
+            
+            // Chi tiết sản phẩm
+            items: orderItems.map((item: any) => ({
+                name: item.name,
+                code: item.sku || item.variant_id.toString(),
+                quantity: item.quantity,
+                price: item.price,
+                length: Math.round(item.length || 10),
+                width: Math.round(item.width || 10),
+                height: Math.round(item.height || 5),
+                weight: Math.round(item.weight || 100),
+            }))
+        };
+        // =========================================================================
+        
+        const ghnShipment = await shippingService.createOrder('ghn', ghnOrderPayload);
+        
         await client.query(
-          `INSERT INTO order_items 
-            (order_id, product_id, variant_id, product_name, product_sku, 
-             quantity, unit_price, batch_number, expiry_date, created_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`,
-          [
-            newOrder.id,
-            item.product_id,
-            item.variant_id || null,
-            item.product_name,
-            item.product_sku || null,
-            item.quantity,
-            item.unit_price,
-            item.batch_number || null,
-            item.expiry_date || null,
-          ]
+            'INSERT INTO shipments (order_id, carrier_id, tracking_number, shipping_cost, status) VALUES ($1, $2, $3, $4, 1)',
+            [newOrder.id, 1, ghnShipment.order_code, ghnShipment.total_fee]
         );
-      }
+        
+        await client.query('COMMIT');
+        
+        res.status(201).json({
+            success: true,
+            message: 'Đặt hàng và tạo đơn vận chuyển thành công!',
+            order: newOrder,
+            shipment: ghnShipment
+        });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        next(error);
+    } finally {
+        client.release();
     }
-
-    // 4. Thêm order_status_history (mặc định "Đang kiểm tra hàng")
-    await client.query(
-      `INSERT INTO order_status_histories 
-   (order_id, from_status, to_status, notes, changed_by, created_at)
-   VALUES ($1, $2, $3, $4, $5, NOW())`,
-      [
-        newOrder.id,
-        null,                          // from_status
-        "Đang kiểm tra hàng",          // to_status
-        null,                          // notes
-        (req.user as any)?.id || null, // changed_by
-      ]
-    );
-
-    await client.query("COMMIT");
-
-    res.status(201).json({
-      message: "Tạo đơn hàng thành công",
-      order: newOrder,
-    });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    next(error);
-  } finally {
-    client.release();
-  }
-};
-
-// src/api/controllers/order.controller.ts
-export const updateOrderStatus = async (req: Request, res: Response) => {
-  const { orderId } = req.params;
-  const { order_status, payment_status, notes } = req.body;
-  const changedBy = (req.user as any)?.id || null;
-
-  if (!order_status && !payment_status) {
-    return res.status(400).json({ message: 'Cần có ít nhất order_status hoặc payment_status' });
-  }
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    // 1. Lấy order hiện tại
-    const orderResult = await client.query(
-      'SELECT order_status, payment_status FROM orders WHERE id = $1',
-      [orderId]
-    );
-    if (orderResult.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
-    }
-
-    const oldOrder = orderResult.rows[0];
-
-    // 2. Update orders
-    const updatedOrderResult = await client.query(
-      `UPDATE orders 
-       SET order_status = COALESCE($1, order_status),
-           payment_status = COALESCE($2, payment_status),
-           updated_at = NOW()
-       WHERE id = $3
-       RETURNING *`,
-      [order_status || null, payment_status || null, orderId]
-    );
-    const updatedOrder = updatedOrderResult.rows[0];
-
-    // 3. Luôn thêm log mới vào order_status_histories
-    const historyResult = await client.query(
-      `INSERT INTO order_status_histories 
-       (order_id, from_status, to_status, notes, changed_by, created_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())
-       RETURNING *`,
-      [
-        orderId,
-        oldOrder.order_status,         // from_status
-        updatedOrder.order_status,     // to_status
-        notes || null,
-        changedBy,
-      ]
-    );
-
-    const newHistory = historyResult.rows[0];
-
-    await client.query('COMMIT');
-
-    return res.json({
-      message: 'Cập nhật đơn hàng thành công',
-      order: updatedOrder,
-      history: newHistory,
-    });
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Error updating order status:', error);
-    res.status(500).json({ message: 'Lỗi server' });
-  } finally {
-    client.release();
-  }
-};
-
-
-
-
-export const deleteOrder = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ message: 'ID đơn hàng không hợp lệ.' });
-
-    const success = await OrderModel.deleteOrder(id);
-    if (!success) return res.status(404).json({ message: 'Không tìm thấy đơn hàng để xóa.' });
-
-    const user = req.user as User;
-
-    if (user) {
-      await createActivityLog({
-        user_id: user.id,
-        action: 'delete-order',
-        details: `User deleted order ID: ${id}`,
-        ip: req.ip ?? null,
-        user_agent: req.get('User-Agent') ?? null,
-      });
-    }
-    res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const deleteOrderItemAndRecalcOrder = async (orderId: number, itemId: number) => {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    // Xóa item
-    const delRes = await client.query(
-      'DELETE FROM order_items WHERE id = $1 AND order_id = $2',
-      [itemId, orderId]
-    );
-    if (delRes.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return false;
-    }
-
-    // Recalculate order subtotal + total_amount
-    const totalRes = await client.query(
-      `SELECT COALESCE(SUM(quantity * unit_price), 0) AS subtotal
-       FROM order_items
-       WHERE order_id = $1`,
-      [orderId]
-    );
-    const subtotal = totalRes.rows[0].subtotal;
-
-    await client.query(
-      `UPDATE orders
-       SET subtotal = $1,
-           total_amount = $1,
-           updated_at = NOW()
-       WHERE id = $2`,
-      [subtotal, orderId]
-    );
-
-    await client.query('COMMIT');
-    return true;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
-};
-
-
-
-// -------------------- USER / SELF --------------------
-
-export const getMyOrders = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const user = req.user as User;
-    if (!user) {
-      return res.status(401).json({ message: 'Bạn chưa đăng nhập.' });
-    }
-
-    const orders = await OrderModel.findOrdersByCustomerId(user.id);
-    res.status(200).json(orders);
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const getMyOrderById = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const user = req.user as User;
-    if (!user) {
-      return res.status(401).json({ message: 'Bạn chưa đăng nhập.' });
-    }
-
-    const id = parseInt(req.params.id, 10);
-    const order = await OrderModel.findOrderById(id);
-
-    if (!order || order.customer_id !== user.id) {
-      return res.status(404).json({ message: 'Không tìm thấy đơn hàng.' });
-    }
-
-    res.status(200).json(order);
-  } catch (error) {
-    next(error);
-  }
 };

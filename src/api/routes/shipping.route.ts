@@ -1,19 +1,13 @@
-// src/api/routes/shippingCarrier.route.ts
 import express from 'express';
-import * as CarrierController from '../controllers/shippingCarrier.controller';
-import { protect, authorize } from '../middlewares/auth.middleware';
+import * as ShippingController from '../controllers/shipping.controller';
+import { protect } from '../middlewares/auth.middleware';
 
 const router = express.Router();
 
-// Yêu cầu quyền 'manage-inventory' hoặc một quyền mới 'manage-shipping'
-router.use(protect, authorize('manage-inventory')); 
+// Định nghĩa endpoint POST /options
+// Middleware 'protect' đảm bảo chỉ người dùng đã đăng nhập mới có thể gọi API này.
+router.post('/options', protect, ShippingController.getShippingOptions);
 
-router.route('/')
-  .get(CarrierController.getAllCarriers)
-  .post(CarrierController.createCarrier);
-
-router.route('/:id')
-  .patch(CarrierController.updateCarrier)
-  .delete(CarrierController.deleteCarrier);
+// (Bạn có thể thêm các route khác liên quan đến vận chuyển ở đây, ví dụ: tạo đơn hàng)
 
 export default router;
