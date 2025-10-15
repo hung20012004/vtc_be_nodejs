@@ -1,32 +1,70 @@
 import pool from '../../config/db';
 import { Product } from '../types/product.type';
-
-export type CreateProductInput = Omit<Product, 'id' | 'created_at' | 'updated_at' | 'deleted_at' | 'search_vector'>;
+export type CreateProductInput = Omit<Product, 'id' | 'created_at' | 'updated_at' | 'deleted_at' | 'search_vector' | 'variants'>;
 export type UpdateProductInput = Partial<CreateProductInput>;
 
 /**
- * Tìm sản phẩm bằng ID.
+ * [NÂNG CẤP] Tìm sản phẩm bằng ID, lấy kèm tất cả thông tin liên quan.
+ * Bao gồm: tên danh mục, tên đơn vị, và danh sách các phiên bản (variants).
  */
 export const findProductById = async (id: number): Promise<Product | null> => {
-    const result = await pool.query('SELECT * FROM products WHERE id = $1 AND deleted_at IS NULL', [id]);
-    return result.rows.length > 0 ? result.rows[0] : null;
+    const result = await pool.query(
+        `SELECT 
+            p.*, 
+            c.name as category_name,
+            u.name as unit_name,
+            (
+                SELECT json_agg(
+                    json_build_object(
+                        'id', pv.id,
+                        'name', pv.name,
+                        'sku', pv.sku,
+                        'price', pv.price,
+                        'stock_quantity', pv.stock_quantity,
+                        'weight', pv.weight,
+                        'length', pv.length,
+                        'width', pv.width,
+                        'height', pv.height,
+                        'image', pv.image,
+                        'is_active', pv.is_active
+                    ) ORDER BY pv.id ASC
+                )
+                FROM product_variants pv
+                WHERE pv.product_id = p.id
+            ) as variants
+         FROM products p
+         LEFT JOIN categories c ON p.category_id = c.id
+         LEFT JOIN units u ON p.unit_id = u.id
+         WHERE p.id = $1 AND p.deleted_at IS NULL
+         GROUP BY p.id, c.name, u.name`,
+        [id]
+    );
+    
+    if (result.rows.length === 0) {
+        return null;
+    }
+
+    // Gán tên vào đối tượng product để tiện sử dụng ở frontend
+    const product = result.rows[0];
+    product.category_name = result.rows[0].category_name;
+    product.unit_name = result.rows[0].unit_name;
+
+    return product;
 };
 
 /**
- * Tạo sản phẩm mới.
+ * [HOÀN THIỆN] Tạo sản phẩm mới với logic xử lý JSON động.
  */
 export const createProduct = async (data: CreateProductInput, createdBy: number): Promise<Product> => {
     const columns: string[] = [];
     const values: any[] = [];
-    let valueCounter = 1;
 
-    // Xử lý dữ liệu đầu vào, đặc biệt là trường 'images'
     Object.keys(data).forEach(key => {
         const typedKey = key as keyof CreateProductInput;
         let value = data[typedKey];
 
-        // Nếu là trường 'images' và là một object, chuyển thành chuỗi JSON
-        if (typedKey === 'images' && typeof value === 'object' && value !== null) {
+        // Tự động chuyển đổi các trường object (JSON) thành chuỗi
+        if (typeof value === 'object' && value !== null) {
             value = JSON.stringify(value);
         }
 
@@ -36,7 +74,6 @@ export const createProduct = async (data: CreateProductInput, createdBy: number)
         }
     });
 
-    // Thêm created_by
     columns.push('"created_by"');
     values.push(createdBy);
 
@@ -48,23 +85,37 @@ export const createProduct = async (data: CreateProductInput, createdBy: number)
 };
 
 /**
- * Cập nhật thông tin sản phẩm.
+ * [HOÀN THIỆN] Cập nhật thông tin sản phẩm với logic xử lý JSON động.
  */
 export const updateProduct = async (id: number, data: UpdateProductInput): Promise<Product | null> => {
-    const updateData = { ...data };
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
 
-    // Nếu có trường 'images', đảm bảo nó được chuyển thành chuỗi JSON
-    if (updateData.images && typeof updateData.images === 'object') {
-        updateData.images = JSON.stringify(updateData.images) as any;
+    for (const key in data) {
+        const typedKey = key as keyof UpdateProductInput;
+        let value = data[typedKey];
+        
+        // Tự động chuyển đổi các trường object (JSON) thành chuỗi
+        if (typeof value === 'object' && value !== null) {
+            value = JSON.stringify(value);
+        }
+
+        if (value !== undefined) {
+            fields.push(`"${key}" = $${idx}`);
+            values.push(value);
+            idx++;
+        }
     }
 
-    const fields = Object.keys(updateData).map((key, index) => `"${key}" = $${index + 1}`);
-    if (fields.length === 0) return findProductById(id);
-
-    const values = Object.values(updateData);
-    const query = `UPDATE products SET ${fields.join(', ')} WHERE id = $${values.length + 1} RETURNING *`;
+    if (fields.length === 0) {
+        return findProductById(id);
+    }
     
-    const result = await pool.query(query, [...values, id]);
+    values.push(id);
+    const query = `UPDATE products SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`;
+    
+    const result = await pool.query(query, values);
     return result.rows.length > 0 ? result.rows[0] : null;
 };
 

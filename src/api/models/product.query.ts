@@ -14,7 +14,7 @@ interface FindAllOptions {
 }
 
 /**
- * Lấy danh sách sản phẩm với các bộ lọc, tìm kiếm và sắp xếp nâng cao.
+ * [NÂNG CẤP] Lấy danh sách sản phẩm với đầy đủ thông tin và các phiên bản đi kèm.
  */
 export const findAllProducts = async (options: FindAllOptions): Promise<{ products: Product[], total: number }> => {
     const { limit, offset, search, categoryId, minPrice, maxPrice, isFeatured, sortBy, sortOrder } = options;
@@ -22,6 +22,7 @@ export const findAllProducts = async (options: FindAllOptions): Promise<{ produc
     const queryParams: any[] = [];
     let whereClauses = ['p.deleted_at IS NULL'];
     
+    // Xây dựng các điều kiện lọc (WHERE)
     if (search) {
         whereClauses.push(`p.search_vector @@ to_tsquery('simple', $${queryParams.length + 1})`);
         queryParams.push(search.split(' ').join(' & '));
@@ -44,23 +45,50 @@ export const findAllProducts = async (options: FindAllOptions): Promise<{ produc
 
     const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
+    // Xây dựng mệnh đề sắp xếp (ORDER BY)
     const allowedSortBy = ['price', 'name', 'created_at'];
     const safeSortBy = sortBy && allowedSortBy.includes(sortBy) ? `p."${sortBy}"` : 'p.id';
     const safeSortOrder = sortOrder === 'asc' ? 'ASC' : 'DESC';
     const orderByString = `ORDER BY ${safeSortBy} ${safeSortOrder}`;
 
-    const finalQueryParams = [...queryParams, limit, offset];
-    
+    // --- TỐI ƯU HÓA PHÂN TRANG VÀ JOIN ---
+    // Bước 1: Chỉ lấy ID của các sản phẩm trên trang hiện tại. Câu query này rất nhanh.
+    const idQuery = `SELECT p.id FROM products p ${whereString} ${orderByString} LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+    const idResult = await pool.query(idQuery, [...queryParams, limit, offset]);
+    const productIds = idResult.rows.map(row => row.id);
+
+    if (productIds.length === 0) {
+        return { products: [], total: 0 };
+    }
+
+    // Bước 2: Lấy toàn bộ thông tin chi tiết cho các ID đã tìm thấy.
     const productsQuery = pool.query(
-        `SELECT p.id, p.name, p.slug, p.price, p.images, p.stock_quantity, p.is_featured, c.name as category_name
+        `SELECT 
+            p.*, 
+            c.name as category_name,
+            u.name as unit_name,
+            json_agg(
+                json_build_object(
+                    'id', pv.id,
+                    'name', pv.name,
+                    'sku', pv.sku,
+                    'price', pv.price,
+                    'stock_quantity', pv.stock_quantity,
+                    'weight', pv.weight,
+                    'image', pv.image
+                )
+            ) FILTER (WHERE pv.id IS NOT NULL) as variants
          FROM products p
          LEFT JOIN categories c ON p.category_id = c.id
-         ${whereString}
-         ${orderByString}
-         LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`,
-        finalQueryParams
+         LEFT JOIN units u ON p.unit_id = u.id
+         LEFT JOIN product_variants pv ON p.id = pv.product_id
+         WHERE p.id = ANY($1::int[])
+         GROUP BY p.id, c.name, u.name
+         ORDER BY ${safeSortBy} ${safeSortOrder}`, // Sắp xếp lại kết quả cuối cùng
+        [productIds]
     );
 
+    // Query đếm tổng số lượng vẫn giữ nguyên và chạy song song
     const totalQuery = pool.query(`SELECT COUNT(*) FROM products p ${whereString}`, queryParams);
     
     const [productsResult, totalResult] = await Promise.all([productsQuery, totalQuery]);
