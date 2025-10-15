@@ -1,4 +1,3 @@
-// src/api/models/cart.model.ts
 import pool from '../../config/db';
 import { CartItem, CartItemWithProductDetails } from '../types/carts.type';
 
@@ -9,16 +8,17 @@ export type AddItemInput = {
     quantity: number;
 };
 
-/**
- * Lấy tất cả sản phẩm trong giỏ hàng của một khách hàng.
- */
 export const getCartByCustomerId = async (customerId: number): Promise<CartItemWithProductDetails[]> => {
   const result = await pool.query(
     `SELECT
-        c.id, c.customer_id, c.product_id, c.variant_id, c.quantity,
-        p.name as product_name, p.price as product_price, p.images as product_images, p.slug as product_slug
+        c.id, c.customer_id, c.product_id, c.variant_id, c.quantity, c.created_at, c.updated_at,
+        p.name as product_name,
+        p.slug as product_slug,
+        COALESCE(pv.price, p.price) as final_price,
+        COALESCE(pv.image, (p.images ->> 'thumbnail')) as final_image
      FROM carts c
      JOIN products p ON c.product_id = p.id
+     LEFT JOIN product_variants pv ON c.variant_id = pv.id
      WHERE c.customer_id = $1
      ORDER BY c.created_at DESC`,
     [customerId]
@@ -34,17 +34,17 @@ export const getCartByCustomerId = async (customerId: number): Promise<CartItemW
     updated_at: row.updated_at,
     product: {
         name: row.product_name,
-        price: row.product_price,
-        images: row.product_images,
+        price: parseFloat(row.final_price),
+        images: {
+            thumbnail: row.final_image,
+            gallery: [] 
+        },
         slug: row.product_slug
     }
   }));
 };
 
-/**
- * Thêm sản phẩm vào giỏ hàng hoặc cập nhật số lượng nếu đã tồn tại.
- * Sử dụng ON CONFLICT của PostgreSQL để tối ưu.
- */
+
 export const addOrUpdateItem = async (data: AddItemInput): Promise<CartItem> => {
     const { customerId, productId, variantId = null, quantity } = data;
     const result = await pool.query(
@@ -58,33 +58,19 @@ export const addOrUpdateItem = async (data: AddItemInput): Promise<CartItem> => 
     return result.rows[0];
 };
 
-/**
- * Cập nhật số lượng của một sản phẩm trong giỏ hàng.
- */
-export const updateItemQuantity = async (itemId: number, customerId: number, quantity: number): Promise<CartItem | null> => {
-    if (quantity <= 0) {
-        // Nếu số lượng <= 0, xóa sản phẩm
-        await removeItem(itemId, customerId);
-        return null;
-    }
+export const updateItemQuantity = async (cartItemId: number, quantity: number, customerId: number): Promise<CartItem | null> => {
     const result = await pool.query(
         'UPDATE carts SET quantity = $1 WHERE id = $2 AND customer_id = $3 RETURNING *',
-        [quantity, itemId, customerId]
+        [quantity, cartItemId, customerId]
     );
     return result.rows.length > 0 ? result.rows[0] : null;
 };
 
-/**
- * Xóa một sản phẩm khỏi giỏ hàng.
- */
-export const removeItem = async (itemId: number, customerId: number): Promise<boolean> => {
-  const result = await pool.query('DELETE FROM carts WHERE id = $1 AND customer_id = $2', [itemId, customerId]);
+export const removeItem = async (cartItemId: number, customerId: number): Promise<boolean> => {
+  const result = await pool.query('DELETE FROM carts WHERE id = $1 AND customer_id = $2', [cartItemId, customerId]);
   return (result.rowCount ?? 0) > 0;
 };
 
-/**
- * Xóa toàn bộ sản phẩm trong giỏ hàng của một khách hàng.
- */
 export const clearCart = async (customerId: number): Promise<boolean> => {
     const result = await pool.query('DELETE FROM carts WHERE customer_id = $1', [customerId]);
     return (result.rowCount ?? 0) > 0;

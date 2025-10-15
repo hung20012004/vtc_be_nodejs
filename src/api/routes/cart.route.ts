@@ -13,7 +13,7 @@ router.route('/')
     .post(CartController.addItem)
     .delete(CartController.clearCart);
 
-router.route('/:itemId')
+router.route('/:cartItemId')
     .patch(CartController.updateItem)
     .delete(CartController.removeItem);
 
