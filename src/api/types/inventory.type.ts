@@ -72,3 +72,31 @@ export interface InventoryExportDetail {
   expiry_date: Date | null;
   reason: string | null;
 }
+// Dữ liệu trả về khi xem tồn kho của một chi nhánh
+export interface BranchInventoryItem {
+    variant_id: number;
+    quantity: number;
+    variant_name: string;
+    sku: string | null;
+    product_name: string;
+}
+
+// Dữ liệu cho một phiếu kiểm kho
+export interface InventoryCheck {
+    id: number;
+    branch_id: number;
+    user_id: number;
+    check_date: Date;
+    notes: string | null;
+    status: 'pending' | 'completed';
+}
+
+// Dữ liệu cho một sản phẩm trong phiếu kiểm kho
+export interface InventoryCheckItem {
+    id: number;
+    inventory_check_id: number;
+    variant_id: number;
+    previous_quantity: number;
+    counted_quantity: number;
+    adjustment: number;
+}

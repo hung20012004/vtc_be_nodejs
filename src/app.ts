@@ -33,6 +33,7 @@ import userRouter from './api/routes/user.route';
 import uploadRouter from './api/routes/upload.route';
 import orderRouter from './api/routes/order.route';
 import locationRouter from './api/routes/location.route';
+import branchRouter from './api/routes/branch.route';
 const app = express();
 
 app.use(cors()); 
@@ -68,6 +69,7 @@ app.use('/api/v1/users', userRouter);
 app.use('/api/v1/orders', orderRouter);
 app.use('/api/v1/uploads', uploadRouter);
 app.use('/api/v1/locations', locationRouter);
+app.use('/api/v1/branches', branchRouter);
 
 app.get('/', (req, res) => {
   res.send('Server is alive and kicking!');

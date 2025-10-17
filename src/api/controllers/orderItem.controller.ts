@@ -134,21 +134,21 @@ export const updateOrderItemAndRecalcOrder = async (
 
 export const getMyOrderItems = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const user = req.user as User;
-    if (!user) {
-      return res.status(401).json({ message: 'Bạn chưa đăng nhập.' });
-    }
+    // const user = req.user as User;
+    // if (!user) {
+    //   return res.status(401).json({ message: 'Bạn chưa đăng nhập.' });
+    // }
 
-    const orderId = parseInt(req.params.orderId, 10);
+    // const orderId = parseInt(req.params.orderId, 10);
     
-    // Kiểm tra đơn hàng có thuộc về khách hàng này không
-    const order = await OrderModel.findOrderById(orderId);
-    if (!order || order.customer_id !== user.id) {
-      return res.status(404).json({ message: 'Không tìm thấy đơn hàng.' });
-    }
+    // // Kiểm tra đơn hàng có thuộc về khách hàng này không
+    // const order = await OrderModel.findOrderById(orderId);
+    // if (!order || order.customer_id !== user.id) {
+    //   return res.status(404).json({ message: 'Không tìm thấy đơn hàng.' });
+    // }
 
-    const orderItems = await OrderItemModel.findOrderItemsByOrderId(orderId);
-    res.status(200).json(orderItems);
+    // const orderItems = await OrderItemModel.findOrderItemsByOrderId(orderId);
+    // res.status(200).json(orderItems);
   } catch (error) {
     next(error);
   }
