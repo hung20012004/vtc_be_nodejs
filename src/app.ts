@@ -36,6 +36,7 @@ import locationRouter from './api/routes/location.route';
 import branchRouter from './api/routes/branch.route';
 import tagRouter from './api/routes/tag.route';
 import postCategoryRouter from './api/routes/postCategory.route';
+import staffRouter from './api/routes/staff.route';
 const app = express();
 
 app.use(cors()); 
@@ -74,6 +75,7 @@ app.use('/api/v1/locations', locationRouter);
 app.use('/api/v1/branches', branchRouter);
 app.use('/api/v1/tags', tagRouter);
 app.use('/api/v1/post-categories', postCategoryRouter);
+app.use('/api/v1/staff', staffRouter);
 
 app.get('/', (req, res) => {
   res.send('Server is alive and kicking!');
