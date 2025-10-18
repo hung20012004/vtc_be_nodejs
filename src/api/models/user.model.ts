@@ -10,6 +10,7 @@ export type CreateUserInput = Pick<User, 'name' | 'email' | 'password'> & {
     status?: number;
     verification_token?: string;
     verification_token_expires?: Date;
+    branch_id?: number;
 };
 
 /**
@@ -25,7 +26,7 @@ export const findUserByEmail = async (email: string): Promise<User | null> => {
  */
 export const findUserById = async (id: number): Promise<Omit<User, 'password'> | null> => {
   const result = await pool.query(
-    'SELECT id, name, email, phone, role_id, avatar, status, user_type, created_at, updated_at FROM users WHERE id = $1',
+    'SELECT id, name, email, phone, role_id, avatar, status, user_type, branch_id, created_at, updated_at FROM users WHERE id = $1',
     [id]
   );
   return result.rows.length > 0 ? result.rows[0] : null;
@@ -36,7 +37,7 @@ export const findUserById = async (id: number): Promise<Omit<User, 'password'> |
  */
 export const getAllUsers = async (): Promise<Omit<User, 'password'>[]> => {
   const result = await pool.query(
-    'SELECT id, name, email, phone, role_id, avatar, status, user_type, created_at, updated_at FROM users'
+    'SELECT id, name, email, phone, role_id, avatar, status, user_type, branch_id, created_at, updated_at FROM users'
   );
   return result.rows;
 };
@@ -48,14 +49,14 @@ export const createUser = async (userData: CreateUserInput, client?: PoolClient)
     // 2. Dùng client nếu được cung cấp, nếu không thì dùng pool chung
     const db = client || pool;
 
-    const { name, email, password, role_id, user_type, status, verification_token, verification_token_expires } = userData;
+    const { name, email, password, role_id, user_type, status, verification_token, verification_token_expires, branch_id } = userData;
     
     // 3. Sử dụng 'db' thay vì 'pool' để thực hiện query
     const result = await db.query(
-        `INSERT INTO users (name, email, password, role_id, user_type, status, verification_token, verification_token_expires)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO users (name, email, password, role_id, user_type, status, verification_token, verification_token_expires branch_id,)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8,$9)
          RETURNING id, name, email, role_id`,
-        [name, email, password, role_id, user_type, status, verification_token, verification_token_expires]
+        [name, email, password, role_id, user_type, status, verification_token, verification_token_expires,branch_id]
     );
     
     return result.rows[0];
