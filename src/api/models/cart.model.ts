@@ -3,57 +3,53 @@ import { CartItem, CartItemWithProductDetails } from '../types/carts.type';
 
 export type AddItemInput = {
     customerId: number;
-    productId: number;
-    variantId?: number | null;
+    variantId: number;
     quantity: number;
 };
 
 export const getCartByCustomerId = async (customerId: number): Promise<CartItemWithProductDetails[]> => {
-  const result = await pool.query(
-    `SELECT
-        c.id, c.customer_id, c.product_id, c.variant_id, c.quantity, c.created_at, c.updated_at,
-        p.name as product_name,
-        p.slug as product_slug,
-        COALESCE(pv.price, p.price) as final_price,
-        COALESCE(pv.image, (p.images ->> 'thumbnail')) as final_image
-     FROM carts c
-     JOIN products p ON c.product_id = p.id
-     LEFT JOIN product_variants pv ON c.variant_id = pv.id
-     WHERE c.customer_id = $1
-     ORDER BY c.created_at DESC`,
-    [customerId]
-  );
+    const result = await pool.query(
+        `SELECT
+            c.id, c.quantity,
+            pv.id as variant_id, pv.name as variant_name, pv.price, pv.image as variant_image, pv.sku,
+            p.id as product_id, p.name as product_name, p.slug as product_slug
+         FROM carts c
+         JOIN product_variants pv ON c.variant_id = pv.id
+         JOIN products p ON pv.product_id = p.id
+         WHERE c.customer_id = $1
+         ORDER BY c.created_at DESC`,
+        [customerId]
+    );
 
-  return result.rows.map(row => ({
-    id: row.id,
-    customer_id: row.customer_id,
-    product_id: row.product_id,
-    variant_id: row.variant_id,
-    quantity: row.quantity,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    product: {
-        name: row.product_name,
-        price: parseFloat(row.final_price),
-        images: {
-            thumbnail: row.final_image,
-            gallery: [] 
+    // Map kết quả từ DB thành cấu trúc JSON lồng nhau, dễ sử dụng hơn ở front-end
+    return result.rows.map(row => ({
+        id: row.id,
+        quantity: row.quantity,
+        variant: {
+            id: row.variant_id,
+            name: row.variant_name,
+            price: parseFloat(row.price),
+            image: row.variant_image,
+            sku: row.sku,
         },
-        slug: row.product_slug
-    }
-  }));
+        product: {
+            id: row.product_id,
+            name: row.product_name,
+            slug: row.product_slug
+        }
+    }));
 };
 
 
 export const addOrUpdateItem = async (data: AddItemInput): Promise<CartItem> => {
-    const { customerId, productId, variantId = null, quantity } = data;
+    const { customerId, variantId, quantity } = data;
     const result = await pool.query(
-        `INSERT INTO carts (customer_id, product_id, variant_id, quantity)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (customer_id, product_id, variant_id)
+        `INSERT INTO carts (customer_id, variant_id, quantity)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (customer_id, variant_id)
          DO UPDATE SET quantity = carts.quantity + EXCLUDED.quantity
          RETURNING *`,
-        [customerId, productId, variantId, quantity]
+        [customerId, variantId, quantity]
     );
     return result.rows[0];
 };
@@ -67,11 +63,11 @@ export const updateItemQuantity = async (cartItemId: number, quantity: number, c
 };
 
 export const removeItem = async (cartItemId: number, customerId: number): Promise<boolean> => {
-  const result = await pool.query('DELETE FROM carts WHERE id = $1 AND customer_id = $2', [cartItemId, customerId]);
-  return (result.rowCount ?? 0) > 0;
+    const result = await pool.query('DELETE FROM carts WHERE id = $1 AND customer_id = $2', [cartItemId, customerId]);
+    return (result.rowCount ?? 0) > 0;
 };
 
 export const clearCart = async (customerId: number): Promise<boolean> => {
     const result = await pool.query('DELETE FROM carts WHERE customer_id = $1', [customerId]);
     return (result.rowCount ?? 0) > 0;
-}
+};

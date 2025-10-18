@@ -1,18 +1,36 @@
-// src/api/types/cart.type.ts
-import { Product } from './product.type';
+import { ProductImageSet } from "./product.type";
 
-// Đại diện cho một dòng trong bảng carts
+// Cấu trúc cơ bản của một item trong giỏ hàng
 export interface CartItem {
-  id: number;
-  customer_id: number;
-  product_id: number;
-  variant_id: number | null;
-  quantity: number;
-  created_at: Date;
-  updated_at: Date;
+    id: number;
+    customer_id: number;
+    variant_id: number; // <-- Bắt buộc
+    quantity: number;
+    created_at: Date;
+    updated_at: Date;
 }
 
-// Kiểu dữ liệu trả về khi xem giỏ hàng, bao gồm thông tin sản phẩm
-export interface CartItemWithProductDetails extends CartItem {
-    product: Pick<Product, 'name' | 'price' | 'images' | 'slug'>;
+// Cấu trúc đầy đủ khi trả về cho client, bao gồm cả thông tin sản phẩm và phiên bản
+export interface CartItemWithProductDetails {
+    id: number;
+    quantity: number;
+    variant: {
+        id: number;
+        name: string | null; // Tên phiên bản, vd: "Size L, Màu Đỏ"
+        price: number;
+        image: string | null;
+        sku: string | null;
+    };
+    product: {
+        id: number;
+        name: string;
+        slug: string;
+    };
 }
+
+// Dữ liệu đầu vào khi thêm sản phẩm vào giỏ
+export type AddItemInput = {
+    customerId: number;
+    variantId: number; // <-- Bắt buộc
+    quantity: number;
+};

@@ -10,7 +10,7 @@ router.use(protect);
 
 router.route('/')
     .get(CartController.getCart)
-    .post(CartController.addItem)
+    .post(CartController.addItemToCart)
     .delete(CartController.clearCart);
 
 router.route('/:cartItemId')

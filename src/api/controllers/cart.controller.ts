@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { User } from '../types/user.type';
 import * as CartModel from '../models/cart.model';
 import * as CustomerModel from '../models/customer.model';
-
+import { findCustomerByUserId } from '../models/customer.model';
 export const getCart = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const user = req.user as User;
@@ -17,29 +17,31 @@ export const getCart = async (req: Request, res: Response, next: NextFunction) =
     }
 };
 
-export const addItem = async (req: Request, res: Response, next: NextFunction) => {
+export const addItemToCart = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const user = req.user as User;
-        const { productId, variantId, quantity } = req.body;
-
-        if (!productId || !quantity || quantity < 1) {
-            return res.status(400).json({ message: 'Vui lòng cung cấp productId và quantity hợp lệ.' });
-        }
-        
-        const customer = await CustomerModel.findCustomerByUserId(user.id);
+        const customer = await findCustomerByUserId(user.id);
         if (!customer) {
-            return res.status(403).json({ message: 'Hành động này chỉ dành cho khách hàng.' });
+            return res.status(403).json({ message: 'Không tìm thấy thông tin khách hàng.' });
         }
 
-        await CartModel.addOrUpdateItem({ customerId: customer.id, productId, variantId, quantity });
-        const cartItems = await CartModel.getCartByCustomerId(customer.id);
-        
-        res.status(200).json({ message: 'Cập nhật giỏ hàng thành công.', data: cartItems });
+        const { variantId, quantity } = req.body;
+
+        if (!variantId || !quantity || quantity <= 0) {
+            return res.status(400).json({ message: 'Vui lòng cung cấp variantId và số lượng hợp lệ.' });
+        }
+
+        const cartItem = await CartModel.addOrUpdateItem({
+            customerId: customer.id,
+            variantId,
+            quantity
+        });
+
+        res.status(201).json(cartItem);
     } catch (error) {
         next(error);
     }
 };
-
 export const updateItem = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const user = req.user as User;
