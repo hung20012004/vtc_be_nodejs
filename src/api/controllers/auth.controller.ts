@@ -47,7 +47,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       success: true,
       message: 'Đăng nhập thành công',
       token,
-      user: { id: user.id, name: user.name, email: user.email, user_type: user.user_type, role_id: user.role_id },
+      user: { id: user.id, name: user.name, email: user.email, user_type: user.user_type, role_id: user.role_id,branch_id: user.branch_id },
     });
   } catch (error) {
     next(error);
