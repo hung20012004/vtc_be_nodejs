@@ -20,15 +20,23 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       return res.status(400).json({ message: 'Vui lòng cung cấp email và mật khẩu' });
     }
 
-    // Sử dụng model để tìm người dùng
-    const user = await findUserByEmail(email);
+    const user = await UserModel.findUserByEmail(email);
 
-    // Gộp 2 lần kiểm tra thành một
     if (!user || !(await bcrypt.compare(password, user.password!))) {
       return res.status(401).json({ message: 'Email hoặc mật khẩu không chính xác' });
     }
 
-    // // Ghi log hoạt động
+    if (user.status !== 1) {
+        return res.status(403).json({ message: 'Tài khoản của bạn chưa được kích hoạt hoặc đã bị khóa.' });
+    }
+    
+    // [BƯỚC BỔ SUNG] Tìm thông tin customer_id tương ứng (nếu có)
+    let customerId = null;
+    const customer = await CustomerModel.findCustomerByUserId(user.id);
+    if (customer) {
+        customerId = customer.id;
+    }
+
     await createActivityLog({
       user_id: user.id,
       action: 'login',
@@ -37,17 +45,25 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       user_agent: req.get('User-Agent') ?? null,
     });
 
-    // Tạo token
     const payload = { userId: user.id, roleId: user.role_id };
     const token = (jwt as any).sign(payload, env.JWT_SECRET, {
-          expiresIn: env.JWT_EXPIRES_IN,
-        });
+        expiresIn: env.JWT_EXPIRES_IN,
+    });
 
     res.status(200).json({
       success: true,
       message: 'Đăng nhập thành công',
       token,
-      user: { id: user.id, name: user.name, email: user.email, user_type: user.user_type, role_id: user.role_id,branch_id: user.branch_id },
+      // Thêm customer_id vào đối tượng user trả về
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        user_type: user.user_type,
+        role_id: user.role_id,
+        branch_id: user.branch_id,
+        customer_id: customerId, // <-- Giá trị được lấy từ bước bổ sung
+      },
     });
   } catch (error) {
     next(error);
