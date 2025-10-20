@@ -40,7 +40,13 @@ import staffRouter from './api/routes/staff.route';
 import profileRouter from './api/routes/profile.route';
 const app = express();
 
-app.use(cors()); 
+app.use(cors({
+  origin: [
+    'https://admin.ffresh.io.vn',   // FE chính thức
+    'http://localhost:3000'   // dùng khi dev
+  ],
+  credentials: true
+}));
 app.use(express.json()); 
 app.use(express.urlencoded({ extended: true })); 
 app.use(cookieParser()); 
