@@ -28,6 +28,12 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string(),
   CLOUDINARY_API_KEY: z.string(),
   CLOUDINARY_API_SECRET: z.string(),
+
+  VNP_TMNCODE: z.string(),
+  VNP_HASHSECRET: z.string(),
+  VNP_URL: z.string().url(),
+  VNP_RETURN_URL: z.string().url(),
+  VNP_IPN_URL: z.string().url(),
 });
 
 // Phân tích và xác thực các biến môi trường
