@@ -9,5 +9,5 @@
     "strict": true,                    // Bật tất cả các quy tắc kiểm tra kiểu nghiêm ngặt
     "skipLibCheck": true               // Bỏ qua việc kiểm tra kiểu của các thư viện
   },
-  "include": ["src/**/*", "scripts"]              // Chỉ biên dịch các file trong thư mục src
+  "include": ["src/**/*", "src/scripts"]              // Chỉ biên dịch các file trong thư mục src
 }
