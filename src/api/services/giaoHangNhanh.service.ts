@@ -68,10 +68,10 @@ export class GiaoHangNhanhService implements IShippingProvider {
             required_note: "CHOXEMHANGKHONGTHU",
             // You should make the 'from' details configurable or load from DB
             from_name: "FruitApp Shop",
-            from_phone: "0123456789",
+            from_phone: "0393337820",
             from_address: "123 Đường ABC",
-            from_ward_code: "20109", // Example, ensure this is correct
-            from_district_id: 1442,  // Example, ensure this is correct
+            from_ward_code: "1A0601", // Example, ensure this is correct
+            from_district_id: 1485,  // Example, ensure this is correct
         };
         const response = await axios.post(`${this.apiBaseUrl}/shipping-order/create`, payload, {
             headers: { 'Token': this.apiKey, 'ShopId': this.shopId.toString() }

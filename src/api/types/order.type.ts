@@ -37,4 +37,5 @@ export interface Order {
   created_by?: number;             // bigint, có thể null
   created_at: Date;                // timestamp with time zone
   updated_at: Date;                // timestamp with time zone
+  
 }
