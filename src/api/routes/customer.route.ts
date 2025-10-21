@@ -5,11 +5,6 @@ import { protect, authorize } from '../middlewares/auth.middleware';
 
 const router = express.Router();
 
-// ==========================================================
-// == API DÀNH CHO KHÁCH HÀNG TỰ QUẢN LÝ ĐỊA CHỈ CỦA MÌNH ==
-// ==========================================================
-// Các route này chỉ cần `protect` để đảm bảo người dùng đã đăng nhập.
-// Controller sẽ tự kiểm tra quyền sở hữu.
 const selfAddressRouter = express.Router();
 selfAddressRouter.use(protect);
 
@@ -20,8 +15,6 @@ selfAddressRouter.route('/')
 selfAddressRouter.route('/:addressId')
     .patch(AddressController.updateCustomerAddress)
     .delete(AddressController.deleteCustomerAddress);
-
-// Gắn router quản lý địa chỉ của chính mình vào đường dẫn /addresses
 router.use('/addresses', selfAddressRouter);
 
 

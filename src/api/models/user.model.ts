@@ -53,7 +53,7 @@ export const createUser = async (userData: CreateUserInput, client?: PoolClient)
     
     // 3. Sử dụng 'db' thay vì 'pool' để thực hiện query
     const result = await db.query(
-        `INSERT INTO users (name, email, password, role_id, user_type, status, verification_token, verification_token_expires branch_id,)
+        `INSERT INTO users (name, email, password, role_id, user_type, status, verification_token, verification_token_expires, branch_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8,$9)
          RETURNING id, name, email, role_id`,
         [name, email, password, role_id, user_type, status, verification_token, verification_token_expires,branch_id]
