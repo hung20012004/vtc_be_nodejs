@@ -1,11 +1,17 @@
 // src/api/controllers/customerAddress.controller.ts
 import { Request, Response, NextFunction } from 'express';
+import { User } from '../types/user.type';
 import * as AddressModel from '../models/customer_address.model';
+import * as CustomerModel from '../models/customer.model';
 
 export const getCustomerAddresses = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const customerId = parseInt(req.params.customerId, 10);
-        const addresses = await AddressModel.getAddressesByCustomerId(customerId);
+        const user = req.user as User;
+        const customer = await CustomerModel.findCustomerByUserId(user.id);
+        if (!customer) {
+            return res.status(404).json({ message: 'Customer not found' });
+        }
+        const addresses = await AddressModel.getAddressesByCustomerId(customer.id);
         res.status(200).json(addresses);
     } catch (error) {
         next(error);
@@ -14,8 +20,12 @@ export const getCustomerAddresses = async (req: Request, res: Response, next: Ne
 
 export const addCustomerAddress = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const customerId = parseInt(req.params.customerId, 10);
-        const newAddress = await AddressModel.createAddress(customerId, req.body);
+        const user = req.user as User;
+        const customer = await CustomerModel.findCustomerByUserId(user.id);
+        if (!customer) {
+            return res.status(404).json({ message: 'Customer not found' });
+        }
+        const newAddress = await AddressModel.createAddress(customer.id, req.body);
         res.status(201).json(newAddress);
     } catch (error) {
         next(error);
@@ -24,9 +34,13 @@ export const addCustomerAddress = async (req: Request, res: Response, next: Next
 
 export const updateCustomerAddress = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const customerId = parseInt(req.params.customerId, 10);
+        const user = req.user as User;
+        const customer = await CustomerModel.findCustomerByUserId(user.id);
+        if (!customer) {
+            return res.status(404).json({ message: 'Customer not found' });
+        }
         const addressId = parseInt(req.params.addressId, 10);
-        const updatedAddress = await AddressModel.updateAddress(addressId, customerId, req.body);
+        const updatedAddress = await AddressModel.updateAddress(addressId, customer.id, req.body);
         if (!updatedAddress) {
             return res.status(404).json({ message: 'Không tìm thấy địa chỉ.' });
         }
@@ -38,9 +52,13 @@ export const updateCustomerAddress = async (req: Request, res: Response, next: N
 
 export const deleteCustomerAddress = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const customerId = parseInt(req.params.customerId, 10);
+        const user = req.user as User;
+        const customer = await CustomerModel.findCustomerByUserId(user.id);
+        if (!customer) {
+            return res.status(404).json({ message: 'Customer not found' });
+        }
         const addressId = parseInt(req.params.addressId, 10);
-        const success = await AddressModel.deleteAddress(addressId, customerId);
+        const success = await AddressModel.deleteAddress(addressId, customer.id);
         if (!success) {
             return res.status(404).json({ message: 'Không tìm thấy địa chỉ.' });
         }
