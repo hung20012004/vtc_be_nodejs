@@ -6,8 +6,8 @@ const shippingService = new ShippingService();
 // --- THÔNG TIN KHO HÀNG CỦA BẠN ---
 // Trong thực tế, bạn nên lưu thông tin này trong database và truy vấn ra.
 const SHOP_ADDRESS = {
-    districtId: 1442, // Ví dụ: Quận Hoàn Kiếm
-    wardCode: "20109"   // Ví dụ: Phường Hàng Bạc
+    districtId: 1485, // Ví dụ: Quận Hoàn Kiếm
+    wardCode: "1A0601"   // Ví dụ: Phường Hàng Bạc
 };
 
 /**

@@ -79,7 +79,6 @@ export class ShippingService {
                 return {
                     service_id: service.service_id,
                     service_name: service.short_name,
-                    description: service.service_type_id === 2 ? "Giao hàng chuẩn" : "Giao hàng nhanh",
                     fee: feeData.total,
                     lead_time: leadTimeData.leadtime, // Giữ lại timestamp để xử lý ở FE nếu cần
                     lead_time_formatted: new Date(leadTimeData.leadtime * 1000).toLocaleDateString('vi-VN', { 
