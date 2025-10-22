@@ -34,6 +34,8 @@ const envSchema = z.object({
   VNP_URL: z.string().url(),
   VNP_RETURN_URL: z.string().url(),
   VNP_IPN_URL: z.string().url(),
+
+  FRONTEND_URL: z.string().url(),
 });
 
 // Phân tích và xác thực các biến môi trường

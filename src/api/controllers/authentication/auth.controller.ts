@@ -149,32 +149,73 @@ export const logout = (req: Request, res: Response) => {
 export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ message: 'Vui lòng cung cấp địa chỉ email.' });
+        }
+
         const user = await UserModel.findUserByEmail(email);
 
-        // Kể cả khi không tìm thấy user, vẫn trả về thành công để tránh lộ thông tin
+        // Kể cả khi không tìm thấy user, vẫn trả về thành công để tránh lộ thông tin email nào đã đăng ký
         if (user) {
-            // 1. Tạo một token ngẫu nhiên
+            // 1. Tạo một token reset ngẫu nhiên, an toàn
             const resetToken = crypto.randomBytes(32).toString('hex');
-            
-            // 2. Lưu token vào DB (chỉ lưu bản hash để tăng bảo mật)
-            // (Trong ví dụ này, chúng ta lưu token gốc để đơn giản hóa, nhưng thực tế nên hash nó)
-            await ResetTokenModel.createOrUpdateResetToken(email, resetToken);
 
-            // 3. Gửi email cho người dùng (PHẦN QUAN TRỌNG)
-            // Trong thực tế, bạn sẽ dùng một thư viện như Nodemailer để gửi email
-            // const resetURL = `${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}`;
-            // await sendEmail({ email: user.email, subject: 'Yêu cầu khôi phục mật khẩu', message: `Link reset: ${resetURL}` });
-            
-            // Vì đây là API, chúng ta sẽ trả về token để bạn có thể test
-            res.status(200).json({ 
-                message: 'Nếu email tồn tại, một link khôi phục mật khẩu đã được gửi.',
-                // Dòng này chỉ để test, không dùng trong production
-                test_token: resetToken 
-            });
+            // 2. Lưu token vào DB (Model sẽ xử lý hash nếu cần thiết)
+            // Đặt thời gian hết hạn cho token (ví dụ: 10 phút)
+            const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+            await ResetTokenModel.createOrUpdateResetToken(email, resetToken, expires);
+
+            // 3. Tạo URL Reset Mật khẩu cho Frontend
+            // **QUAN TRỌNG:** Thay 'YOUR_FRONTEND_RESET_PASSWORD_URL' bằng URL thực tế của trang đặt lại mật khẩu trên frontend của bạn
+            // Ví dụ: http://localhost:3000/reset-password
+            const resetURL = `${env.FRONTEND_URL || 'YOUR_FRONTEND_BASE_URL'}/reset-password?token=${resetToken}`;
+
+            // 4. Tạo nội dung Email
+            const emailHtml = `
+                <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+                    <h2>Yêu cầu Khôi phục Mật khẩu</h2>
+                    <p>Xin chào ${user.name || 'bạn'},</p>
+                    <p>Chúng tôi nhận được yêu cầu khôi phục mật khẩu cho tài khoản của bạn tại Nông Sản Sạch.</p>
+                    <p>Vui lòng bấm vào nút bên dưới để đặt lại mật khẩu của bạn. Link này sẽ hết hạn sau 10 phút.</p>
+                    <p style="text-align: center; margin: 20px 0;">
+                        <a href="${resetURL}" style="background-color: #28a745; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Đặt lại mật khẩu</a>
+                    </p>
+                    <p>Nếu bạn không yêu cầu khôi phục mật khẩu, vui lòng bỏ qua email này.</p>
+                    <p>Nếu nút trên không hoạt động, bạn cũng có thể sao chép và dán link sau vào trình duyệt:</p>
+                    <p><a href="${resetURL}">${resetURL}</a></p>
+                    <br>
+                    <p>Trân trọng,<br>Đội ngũ Nông Sản Sạch</p>
+                </div>
+            `;
+
+            // 5. Gửi email
+            try {
+                await sendEmail({
+                    to: user.email, // Gửi đến email của user tìm thấy
+                    subject: 'Nông Sản Sạch - Yêu cầu Khôi phục Mật khẩu',
+                    html: emailHtml,
+                });
+                 console.log(`Password reset email sent successfully to ${user.email}`);
+            } catch (emailError) {
+                console.error(`Failed to send password reset email to ${user.email}:`, emailError);
+                // Không báo lỗi cụ thể cho client, chỉ log ở server
+                // throw emailError; // Cân nhắc có nên throw lỗi không
+            }
         } else {
-             res.status(200).json({ message: 'Nếu email tồn tại, một link khôi phục mật khẩu đã được gửi.' });
+             console.log(`Password reset requested for non-existent email: ${email}`);
         }
-    } catch (error) { next(error); }
+
+        // Luôn trả về thông báo thành công chung chung cho client
+        res.status(200).json({
+            success: true,
+            message: 'Nếu địa chỉ email của bạn tồn tại trong hệ thống, bạn sẽ nhận được một email hướng dẫn khôi phục mật khẩu trong vài phút.'
+            // Không trả về token ở đây nữa!
+        });
+
+    } catch (error) {
+        console.error("Forgot Password error:", error);
+        next(error); // Chuyển lỗi cho middleware xử lý lỗi chung
+    }
 };
 
 export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
@@ -183,28 +224,37 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
         if (!token || !password) {
             return res.status(400).json({ message: 'Vui lòng cung cấp token và mật khẩu mới.' });
         }
+        if (password.length < 6) { // Thêm validation cơ bản cho password
+             return res.status(400).json({ message: 'Mật khẩu phải có ít nhất 6 ký tự.' });
+        }
 
+        // Tìm bản ghi token trong DB
         const tokenRecord = await ResetTokenModel.findTokenRecord(token);
 
-        if (!tokenRecord) {
-            return res.status(400).json({ message: 'Token không hợp lệ.' });
+        // Kiểm tra token tồn tại và chưa hết hạn
+        if (!tokenRecord || new Date() > new Date(tokenRecord.expires)) {
+            // Xóa token cũ nếu có và hết hạn
+            if(tokenRecord) await ResetTokenModel.deleteTokenByToken(token);
+            return res.status(400).json({ message: 'Token không hợp lệ hoặc đã hết hạn.' });
         }
 
-        // Kiểm tra token hết hạn (ví dụ: 10 phút)
-        const tokenAge = Date.now() - new Date(tokenRecord.created_at).getTime();
-        if (tokenAge > 10 * 60 * 1000) { // 10 phút
-            return res.status(400).json({ message: 'Token đã hết hạn.' });
-        }
-
-        // Cập nhật mật khẩu mới
+        // Cập nhật mật khẩu mới cho user tương ứng với email trong tokenRecord
         const hashedPassword = await bcrypt.hash(password, 10);
-        await UserModel.updatePasswordByEmail(tokenRecord.email, hashedPassword);
+        const updated = await UserModel.updatePasswordByEmail(tokenRecord.email, hashedPassword);
 
-        // Xóa token sau khi đã sử dụng
-        await ResetTokenModel.deleteToken(tokenRecord.email);
-        
-        res.status(200).json({ message: 'Mật khẩu đã được cập nhật thành công.' });
-    } catch (error) { next(error); }
+        if (updated) {
+             // Xóa token sau khi đã sử dụng thành công
+             await ResetTokenModel.deleteTokenByToken(token); // Xóa theo token để chắc chắn
+             res.status(200).json({ success: true, message: 'Mật khẩu đã được cập nhật thành công.' });
+        } else {
+            // Lỗi không tìm thấy user để cập nhật (ít khi xảy ra nếu token hợp lệ)
+             throw new Error('Không tìm thấy người dùng để cập nhật mật khẩu.');
+        }
+
+    } catch (error) {
+        console.error("Reset Password error:", error);
+        next(error);
+    }
 };
 
 export const verifyEmail = async (req: Request, res: Response, next: NextFunction) => {
