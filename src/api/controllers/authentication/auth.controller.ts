@@ -61,7 +61,8 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         user_type: user.user_type,
         role_id: user.role_id,
         branch_id: user.branch_id,
-        customer_id: customerId, // <-- Giá trị được lấy từ bước bổ sung
+        customer_id: customerId, 
+        avartar: user.avatar,
       },
     });
   } catch (error) {
