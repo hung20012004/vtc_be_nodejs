@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import moment from 'moment'; // Hoặc dùng date-fns
 import qs from 'qs';
 import { env } from '../../config/env'; // File cấu hình biến môi trường của bạn
-import { Order } from '../types/order.type';
+import { Order } from '../types/orders/order.type';
 
 export class VNPayService {
     private tmnCode: string;
