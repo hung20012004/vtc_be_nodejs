@@ -196,9 +196,9 @@ export const reviewImportRequest = async (
             await client.query(
                 `UPDATE inventory_imports
                  SET status = $1, supplier_id = $2, approved_by = $3, approved_at = NOW(),
-                     total_amount = $4, notes = CONCAT(COALESCE(notes,''), E'\\n', $5), updated_at = NOW()
+                     total_amount = $4, notes = COALESCE(notes, '') || E'\\n' || $5::TEXT, updated_at = NOW()
                  WHERE id = $6`,
-                [newStatus, supplier_id, userId, totalAmount, finalNote, importId]
+                [newStatus, supplier_id, userId, totalAmount, finalNote, importId] // Tham số giữ nguyên
             );
         } else {
             throw new Error(`Hành động "${action}" không hợp lệ.`);
