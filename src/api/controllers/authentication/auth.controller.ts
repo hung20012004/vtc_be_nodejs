@@ -257,24 +257,80 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     }
 };
 
+
 export const verifyEmail = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { token } = req.query;
-        if (!token) {
-            return res.status(400).send('Token xác thực không hợp lệ hoặc đã hết hạn.');
+        if (!token || typeof token !== 'string') { // Kiểm tra kiểu string
+             // Trả về lỗi HTML thân thiện hơn
+             return res.status(400).send(`
+                <div style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                    <h1 style="color: #dc3545;">Lỗi Xác Thực</h1>
+                    <p>Token xác thực không hợp lệ, bị thiếu hoặc đã hết hạn.</p>
+                    <p>Vui lòng thử đăng ký lại hoặc yêu cầu gửi lại email kích hoạt nếu có.</p>
+                </div>
+            `);
         }
 
-        const user = await UserModel.findUserByVerificationToken(token as string);
-        if (!user) {
-            return res.status(400).send('Token xác thực không hợp lệ hoặc đã hết hạn.');
+        const user = await UserModel.findUserByVerificationToken(token);
+
+        // Kiểm tra user tồn tại VÀ token chưa hết hạn (kiểm tra expires trong findUserByVerificationToken đã đủ)
+        // Tuy nhiên, kiểm tra lại user.verification_token_expires cũng không thừa
+        if (!user || !user.verification_token_expires || new Date() > new Date(user.verification_token_expires)) {
+            // Xóa token cũ nếu hết hạn để tránh dùng lại
+            return res.status(400).send(`
+                <div style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                    <h1 style="color: #dc3545;">Lỗi Xác Thực</h1>
+                    <p>Token xác thực không hợp lệ hoặc đã hết hạn.</p>
+                     <p>Vui lòng thử đăng ký lại hoặc yêu cầu gửi lại email kích hoạt nếu có.</p>
+                </div>
+            `);
         }
-        
+
+        // Kích hoạt tài khoản và xóa token
+        // activateUser có thể trả về void; gọi rồi kiểm tra trạng thái user bằng cách lấy lại thông tin từ DB
         await UserModel.activateUser(user.id);
-        
-        // Chuyển hướng người dùng đến trang đăng nhập hoặc trang thông báo thành công
-        // res.redirect('YOUR_FRONTEND_LOGIN_PAGE_URL');
-        res.status(200).send('<h1>Xác thực email thành công!</h1><p>Bạn có thể đóng trang này và đăng nhập vào ứng dụng.</p>');
+
+        // Lấy lại user để kiểm tra trạng thái đã được cập nhật hay chưa
+        const updatedUser = await UserModel.findUserByEmail(user.email);
+
+        if (!updatedUser || updatedUser.status !== 1) {
+            // Trường hợp activateUser thất bại (vd: user không ở status 0 hoặc cập nhật không thành công)
+             return res.status(400).send(`
+                <div style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                    <h1 style="color: #ffc107;">Thông Báo</h1>
+                    <p>Tài khoản này có thể đã được kích hoạt trước đó hoặc trạng thái không hợp lệ.</p>
+                    <p>Vui lòng thử đăng nhập.</p>
+                </div>
+            `);
+        }
+
+        // --- CHUYỂN HƯỚNG VỀ TRANG LOGIN FRONTEND ---
+        // Lấy URL frontend từ biến môi trường
+        const frontendLoginUrl = env.FRONTEND_URL ? `${env.FRONTEND_URL}/login` : 'YOUR_FALLBACK_FRONTEND_LOGIN_URL'; // Thay URL fallback nếu cần
+
+        // Tạo URL redirect, thêm query param để báo thành công
+        const redirectUrl = new URL(frontendLoginUrl);
+        redirectUrl.searchParams.set('verified', 'true'); // Frontend có thể đọc param này để hiển thị thông báo
+        redirectUrl.searchParams.set('email', user.email); // Gửi kèm email để điền sẵn form login (tùy chọn)
+
+        console.log(`Redirecting user to: ${redirectUrl.toString()}`);
+
+        // Thực hiện redirect
+        res.redirect(redirectUrl.toString());
+
+        // Dòng res.send() cũ bị xóa bỏ
+        // res.status(200).send('<h1>Xác thực email thành công!</h1><p>Bạn có thể đóng trang này và đăng nhập vào ứng dụng.</p>');
+
     } catch (error) {
-        next(error);
+        console.error("Verify Email error:", error);
+        // Trả về lỗi HTML chung nếu có lỗi server
+         res.status(500).send(`
+            <div style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                <h1 style="color: #dc3545;">Lỗi Hệ Thống</h1>
+                <p>Đã xảy ra lỗi trong quá trình xác thực email. Vui lòng thử lại sau.</p>
+            </div>
+        `);
+        next(error); // Vẫn log lỗi ở server
     }
 };
