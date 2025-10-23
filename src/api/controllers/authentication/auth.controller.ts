@@ -307,7 +307,7 @@ export const verifyEmail = async (req: Request, res: Response, next: NextFunctio
 
         // --- CHUYỂN HƯỚNG VỀ TRANG LOGIN FRONTEND ---
         // Lấy URL frontend từ biến môi trường
-        const frontendLoginUrl = env.FRONTEND_URL ? `${env.FRONTEND_URL}/login` : 'YOUR_FALLBACK_FRONTEND_LOGIN_URL'; // Thay URL fallback nếu cần
+        const frontendLoginUrl = env.FRONTEND_URL ? `${env.FRONTEND_URL}/auth/login` : 'YOUR_FALLBACK_FRONTEND_LOGIN_URL'; // Thay URL fallback nếu cần
 
         // Tạo URL redirect, thêm query param để báo thành công
         const redirectUrl = new URL(frontendLoginUrl);
