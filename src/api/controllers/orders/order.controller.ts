@@ -179,9 +179,9 @@ export const placeOrder = async (req: Request, res: Response, next: NextFunction
                         <p>Chúng tôi sẽ xử lý ${newOrder.payment_method?.toLowerCase() === 'cod' ? 'và liên hệ xác nhận ' : ''}đơn hàng của bạn trong thời gian sớm nhất.</p>
 
                         <h3 style="border-bottom: 2px solid #0056b3; padding-bottom: 5px; margin-top: 25px;">Chi tiết đơn hàng:</h3>
-                        <p><strong>Người nhận:</strong> ${newOrder.customer_name}</p>
+                        <p><strong>Người nhận:</strong> ${newOrder.recipient_name}</p>
                         <p><strong>Địa chỉ giao hàng:</strong> ${newOrder.shipping_address}</p>
-                        <p><strong>Điện thoại:</strong> ${newOrder.customer_phone}</p>
+                        <p><strong>Điện thoại:</strong> ${newOrder.recipient_name}</p>
                         <p><strong>Phương thức thanh toán:</strong> ${newOrder.payment_method?.toUpperCase() ?? 'N/A'}</p>
                         ${newOrder.notes ? `<p><strong>Ghi chú:</strong> ${newOrder.notes}</p>` : ''}
 
@@ -488,7 +488,7 @@ export const updateOrderStatus = async (req: Request, res: Response, next: NextF
                     const fullHtml = `
                         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px;">
                             <h2 style="color: #0056b3; text-align: center;">Cập nhật trạng thái đơn hàng #${updatedOrder.order_number}</h2>
-                            <p>Xin chào ${updatedOrder.customer_name},</p>
+                            <p>Xin chào ${updatedOrder.account_customer_name},</p>
                             ${htmlBody}
                             <p style="margin-top: 20px;">Trân trọng,<br/><strong>${SHOP_INFO.from_name}</strong></p>
                              <hr style="border: none; border-top: 1px solid #eee; margin-top: 20px;">

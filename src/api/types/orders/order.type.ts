@@ -1,41 +1,47 @@
-// src/api/types/order.type.ts
+// src/api/types/orders/order.type.ts
 
 export interface Order {
   id: number;
-  order_code: string;
-  customer_id?: number;            // bigint, có thể null
-  order_date: Date;                // timestamp with time zone
-  order_status: string;            // varchar(50), not null
-  total_amount: number;            // numeric(15,2), not null
-  shipping_address_id?: number;    // bigint, có thể null
-  payment_method?: string;         // varchar(100), có thể null
-  payment_status?: string;         // varchar(50), có thể null
-  order_number?: string;           // varchar(50), có thể null
-  customer_name?: string;          // varchar(255), có thể null
-  customer_phone?: string;         // varchar(20), có thể null
-  customer_email?: string;         // varchar(255), có thể null
-  shipping_address?: string;       // text, có thể null
-  shipping_province?: string;      // varchar(100), có thể null
-  shipping_district?: string;      // varchar(100), có thể null
-  shipping_ward?: string;          // varchar(100), có thể null
-  subtotal: number;                // numeric(15,2), not null
-  shipping_fee?: number;           // numeric(15,2), có thể null
-  discount_amount?: number;        // numeric(15,2), có thể null
-  tax_amount?: number;             // numeric(15,2), có thể null
-  required_date?: Date;            // date, có thể null
-  shipping_status?: number;        // smallint, có thể null
-  coupon_code?: string;            // varchar(50), có thể null
-  notes?: string;                  // text, có thể null
-  internal_notes?: string;         // text, có thể null
-  assigned_to?: number;            // bigint, có thể null
-  confirmed_by?: number;           // bigint, có thể null
-  confirmed_at?: Date;             // timestamp with time zone, có thể null
-  shipped_at?: Date;               // timestamp with time zone, có thể null
-  delivered_at?: Date;             // timestamp with time zone, có thể null
-  cancelled_at?: Date;             // timestamp with time zone, có thể null
-  cancel_reason?: string;          // text, có thể null
-  created_by?: number;             // bigint, có thể null
-  created_at: Date;                // timestamp with time zone
-  updated_at: Date;                // timestamp with time zone
-  
+  order_number: string; // Changed from optional, assuming this is the main identifier now
+  customer_id?: number;
+  order_date: Date;
+  order_status: string;
+  total_amount: number;
+  shipping_address_id?: number;
+  payment_method?: string;
+  payment_status?: string;
+
+  // Renamed columns for recipient info
+  recipient_name?: string; // Renamed from customer_name
+  recipient_phone?: string; // Renamed from customer_phone
+
+  // New columns for account owner info
+  account_customer_name?: string;
+  account_customer_phone?: string;
+
+  customer_email?: string; // Keeping this, assuming it's related to the recipient or for contact
+  shipping_address?: string;
+  shipping_province?: string;
+  shipping_district?: string;
+  shipping_ward?: string;
+  subtotal: number;
+  shipping_fee?: number;
+  discount_amount?: number;
+  tax_amount?: number;
+  required_date?: Date;
+  shipping_status?: number;
+  coupon_code?: string;
+  notes?: string;
+  internal_notes?: string;
+  assigned_to?: number;
+  confirmed_by?: number;
+  confirmed_at?: Date;
+  shipped_at?: Date;
+  delivered_at?: Date;
+  cancelled_at?: Date;
+  cancel_reason?: string;
+  created_by?: number;
+  created_at: Date;
+  updated_at: Date;
+  // order_code?: string; // Removed as per your request
 }
