@@ -21,7 +21,7 @@ import importRouter from './api/routes/inventory/inventoryImport.route';
 import exportRouter from './api/routes/inventory/inventoryExport.route';
 import checkRouter from './api/routes/inventory/inventoryCheck.route';
 import branchInventoryRouter from './api/routes/inventory/branchInventory.route';
-
+import reportRouter from './api/routes/reports/report.route';
 import couponRouter from './api/routes/shopping/coupon.route';
 import bannerRouter from './api/routes/settings/banner.route';
 import contactRouter from './api/routes/shopping/contact.route';
@@ -45,7 +45,9 @@ const app = express();
 
 app.use(cors({
   origin: [
-    'https://admin.ffresh.io.vn',   // FE chính thức
+    'https://admin.ffresh.io.vn', 
+    'https://www.ffresh.io.vn',
+    'https://ffresh.io.vn',  // FE chính thức
     'http://localhost:3000'   // dùng khi dev
   ],
   credentials: true
@@ -89,7 +91,7 @@ app.use('/api/v1/tags', tagRouter);
 app.use('/api/v1/post-categories', postCategoryRouter);
 app.use('/api/v1/staff', staffRouter);
 app.use('/api/v1/profile', profileRouter);
-
+app.use('/api/v1/reports', reportRouter);
 app.get('/', (req, res) => {
   res.send('Server is alive and kicking!');
 });
