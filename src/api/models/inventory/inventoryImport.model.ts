@@ -130,9 +130,9 @@ export const requestImport = async (importData: Pick<InventoryImport, 'import_co
  */
 export const reviewImportRequest = async (
     importId: number,
-    action: 'approve' | 'reject' | 'cancel', // Thêm 'reject'
+    action: 'approve' | 'reject' | 'cancel',
     data: { supplier_id?: number; details?: Array<Pick<InventoryImportDetail, 'id' | 'import_quantity' | 'import_price'>>; note?: string },
-    userId: number // ID của người thực hiện (approve/reject/cancel)
+    userId: number
 ): Promise<{ success: boolean; message: string; importData?: InventoryImport }> => {
     const client = await pool.connect();
     try {
@@ -143,32 +143,37 @@ export const reviewImportRequest = async (
         const currentStatus = currentResult.rows[0].status;
         const requesterId = currentResult.rows[0].requested_by;
 
-        // Chỉ có thể review phiếu đang ở trạng thái 'requested'
         if (currentStatus !== 'requested') {
             throw new Error(`Phiếu đang ở trạng thái "${currentStatus}", không thể ${action}.`);
         }
 
         let newStatus: InventoryImport['status'];
         let message = '';
-        let finalNote = data.note || ''; // Ghi chú cho hành động này
+        const actionNote = data.note || ''; // Luôn đảm bảo actionNote là string
 
         if (action === 'cancel') {
-            // Chỉ người yêu cầu mới được cancel? (Tùy nghiệp vụ)
-            // if (requesterId !== userId) throw new Error('Bạn không có quyền hủy yêu cầu này.');
             newStatus = 'cancelled';
             message = 'Đã hủy phiếu yêu cầu nhập kho.';
-            finalNote = `Cancelled by User ${userId}: ${finalNote}`;
+            const finalNote = `Cancelled by User ${userId}: ${actionNote}`; // finalNote giờ là string
+
+            // [SỬA ĐỔI]: Dùng toán tử || và ::TEXT cho $2
             await client.query(
-                "UPDATE inventory_imports SET status = $1, notes = CONCAT(COALESCE(notes,''), E'\\n', $2), updated_at = NOW() WHERE id = $3",
-                [newStatus, finalNote, importId]
+                `UPDATE inventory_imports
+                 SET status = $1, notes = COALESCE(notes, '') || E'\\n' || $2::TEXT, updated_at = NOW()
+                 WHERE id = $3`,
+                [newStatus, finalNote, importId] // Tham số giữ nguyên
             );
         } else if (action === 'reject') {
-            newStatus = 'rejected'; // Trạng thái mới
+            newStatus = 'rejected';
             message = 'Đã từ chối phiếu yêu cầu nhập kho.';
-            finalNote = `Rejected by User ${userId}: ${finalNote}`;
+            const finalNote = `Rejected by User ${userId}: ${actionNote}`; // finalNote giờ là string
+
+            // [SỬA ĐỔI]: Dùng toán tử || và ::TEXT cho $2 (mặc dù $2 là note, nên ép kiểu luôn cho chắc)
             await client.query(
-                "UPDATE inventory_imports SET status = $1, notes = CONCAT(COALESCE(notes,''), E'\\n', $2), approved_by = $3, approved_at = NOW(), updated_at = NOW() WHERE id = $4",
-                [newStatus, finalNote, userId, importId]
+                `UPDATE inventory_imports
+                 SET status = $1, notes = COALESCE(notes, '') || E'\\n' || $2::TEXT, approved_by = $3, approved_at = NOW(), updated_at = NOW()
+                 WHERE id = $4`,
+                [newStatus, finalNote, userId, importId] // Tham số giữ nguyên
             );
         } else if (action === 'approve') {
             const { supplier_id, details } = data;
@@ -182,7 +187,6 @@ export const reviewImportRequest = async (
                     throw new Error(`Giá (${detail.import_price}) và số lượng (${detail.import_quantity}) phải hợp lệ cho item ID ${detail.id}.`);
                 }
                 totalAmount += detail.import_quantity * detail.import_price;
-                // Cập nhật lại cả số lượng nếu quản lý cho phép sửa
                 return client.query(
                     "UPDATE inventory_import_details SET import_price = $1, import_quantity = $2 WHERE id = $3 AND import_id = $4",
                     [detail.import_price, detail.import_quantity, detail.id, importId]
@@ -192,25 +196,25 @@ export const reviewImportRequest = async (
 
             newStatus = 'approved';
             message = 'Đã phê duyệt phiếu yêu cầu nhập kho.';
-            finalNote = `Approved by User ${userId}: ${finalNote}`;
+            const finalNote = `Approved by User ${userId}: ${actionNote}`; // finalNote giờ là string
             await client.query(
                 `UPDATE inventory_imports
                  SET status = $1, supplier_id = $2, approved_by = $3, approved_at = NOW(),
                      total_amount = $4, notes = COALESCE(notes, '') || E'\\n' || $5::TEXT, updated_at = NOW()
                  WHERE id = $6`,
-                [newStatus, supplier_id, userId, totalAmount, finalNote, importId] // Tham số giữ nguyên
+                [newStatus, supplier_id, userId, totalAmount, finalNote, importId]
             );
         } else {
             throw new Error(`Hành động "${action}" không hợp lệ.`);
         }
 
         await client.query('COMMIT');
-        const updatedImport = await findImportById(importId); // Lấy lại thông tin đầy đủ
+        const updatedImport = await findImportById(importId);
         return { success: true, message, importData: updatedImport || undefined };
     } catch (error) {
         await client.query('ROLLBACK');
         console.error(`Error during reviewImportRequest (Action: ${action}):`, error);
-        throw error; // Ném lỗi để controller xử lý
+        throw error;
     } finally {
         client.release();
     }
