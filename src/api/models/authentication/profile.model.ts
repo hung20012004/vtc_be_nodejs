@@ -55,13 +55,13 @@ export const updateCustomerProfile = async (userId: number, data: Partial<User>)
         const { name, phone, address, avatar } = data;
         
         const userUpdateResult = await client.query(
-            'UPDATE users SET name = $1, phone = $2, address = $3, avatar = $4, updated_at = NOW() WHERE id = $5 RETURNING *',
+            'UPDATE users SET name = $1, phone = $2, avatar = $4, updated_at = NOW() WHERE id = $5 RETURNING *',
             [name, phone, address, avatar, userId]
         );
         if (userUpdateResult.rows.length === 0) throw new Error('User not found.');
 
         await client.query(
-            'UPDATE customers SET name = $1, phone = $2, address = $3 WHERE user_id = $4',
+            'UPDATE customers SET name = $1, phone = $2 WHERE user_id = $4',
             [name, phone, address, userId]
         );
 
