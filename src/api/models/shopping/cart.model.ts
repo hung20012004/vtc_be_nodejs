@@ -7,39 +7,32 @@ export type AddItemInput = {
     quantity: number;
 };
 
-export const getCartByCustomerId = async (customerId: number): Promise<CartItemWithProductDetails[]> => {
-    const result = await pool.query(
-        `SELECT
-            c.id, c.quantity,
-            pv.id as variant_id, pv.name as variant_name, pv.price, pv.image as variant_image, pv.sku,
-            p.id as product_id, p.name as product_name, p.slug as product_slug
-         FROM carts c
-         JOIN product_variants pv ON c.variant_id = pv.id
-         JOIN products p ON pv.product_id = p.id
-         WHERE c.customer_id = $1
-         ORDER BY c.created_at DESC`,
-        [customerId]
-    );
+export const getCartByCustomerId = async (customerId: number): Promise<CartItem[]> => {
+    const query = `
+        SELECT
+            c.id, c.customer_id, c.variant_id, c.quantity, c.created_at, c.updated_at,
+            -- Lấy thông tin chi tiết từ variants và products
+            p.name || COALESCE(' - ' || pv.name, '') as product_name,
+            pv.price,
+            pv.sku,
+            COALESCE(pv.image, p.images->>'thumbnail') as image, -- Ưu tiên ảnh variant, fallback về ảnh product
+            pv.weight -- <<--- LẤY THÊM WEIGHT TỪ PRODUCT_VARIANTS
+        FROM carts c
+        JOIN product_variants pv ON c.variant_id = pv.id
+        JOIN products p ON pv.product_id = p.id
+        WHERE c.customer_id = $1
+        ORDER BY c.created_at DESC; -- Hoặc ORDER BY p.name, pv.name
+    `;
+    const result = await pool.query(query, [customerId]);
 
-    // Map kết quả từ DB thành cấu trúc JSON lồng nhau, dễ sử dụng hơn ở front-end
+    // Chuyển đổi kiểu dữ liệu nếu cần (price và weight từ numeric/decimal sang number)
     return result.rows.map(row => ({
-        id: row.id,
-        quantity: row.quantity,
-        variant: {
-            id: row.variant_id,
-            name: row.variant_name,
-            price: parseFloat(row.price),
-            image: row.variant_image,
-            sku: row.sku,
-        },
-        product: {
-            id: row.product_id,
-            name: row.product_name,
-            slug: row.product_slug
-        }
+        ...row,
+        price: parseFloat(row.price),
+        weight: row.weight ? parseFloat(row.weight) : null, // Chuyển đổi weight và xử lý NULL
+        quantity: parseInt(row.quantity, 10)
     }));
 };
-
 
 export const addOrUpdateItem = async (data: AddItemInput): Promise<CartItem> => {
     const { customerId, variantId, quantity } = data;
