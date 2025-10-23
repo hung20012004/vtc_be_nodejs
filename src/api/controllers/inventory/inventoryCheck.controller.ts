@@ -55,13 +55,23 @@ export const startNewCheck = async (req: Request, res: Response, next: NextFunct
     try {
         const user = req.user as User;
         const { branchId, notes } = req.body;
-        if (!branchId || isNaN(parseInt(branchId, 10))) {
-             return res.status(400).json({ message: 'Vui lòng cung cấp ID chi nhánh (branchId) hợp lệ.' });
+
+        // --- [SỬA ĐỔI KIỂM TRA] ---
+        // Kiểm tra xem branchId có tồn tại (không phải null/undefined) và có phải là số hay không
+        // Chấp nhận cả số 0
+        const parsedBranchId = parseInt(branchId, 10); // Chuyển đổi trước
+        if (branchId === undefined || branchId === null || isNaN(parsedBranchId)) {
+            // Chỉ báo lỗi nếu thiếu hoặc không phải là số
+            return res.status(400).json({ message: 'Vui lòng cung cấp ID chi nhánh (branchId) hợp lệ.' });
         }
-        const newCheck = await CheckModel.createCheck(parseInt(branchId, 10), user.id, notes);
+        // --- [KẾT THÚC SỬA ĐỔI] ---
+
+        // Sử dụng parsedBranchId đã chuyển đổi
+        const newCheck = await CheckModel.createCheck(parsedBranchId, user.id, notes);
+
         await createActivityLog({
             user_id: user.id, action: 'start-inventory-check',
-            details: `User started inventory check (ID: ${newCheck.id}) for branch ID: ${branchId}`,
+            details: `User started inventory check (ID: ${newCheck.id}) for branch ID: ${parsedBranchId}`, // Dùng parsedBranchId
             ip: req.ip ?? null, user_agent: req.get('User-Agent') ?? null,
         });
         res.status(201).json(newCheck);
