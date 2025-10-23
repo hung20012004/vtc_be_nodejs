@@ -1,34 +1,32 @@
-import pool from '../../../config/db'; // Đảm bảo đường dẫn đúng
+import pool from '../../../config/db';
 import { PoolClient } from 'pg';
 import { InventoryImport, InventoryImportDetail } from '../../types/inventory/inventory.type'; // Đảm bảo import đúng type
 
-type CreateImportInput = Omit<InventoryImport, 'id' | 'created_at' | 'updated_at' | 'total_amount' | 'status' | 'payment_status' | 'import_date' | 'approved_by' | 'approved_at' | 'received_by' | 'received_at' | 'supplier_id' | 'paid_by'>; // Thêm paid_by vào Omit nếu có
-type CreateImportDetailInput = Omit<InventoryImportDetail, 'id' | 'import_id' | 'import_price'> & { import_price?: number };
+type CreateImportInput = Omit<InventoryImport, 'id' | 'created_at' | 'updated_at' | 'total_amount' | 'status' | 'payment_status' | 'import_date' | 'approved_by' | 'approved_at' | 'received_by' | 'received_at' | 'supplier_id'> & { import_date?: Date | string };
+type CreateImportDetailInput = Omit<InventoryImportDetail, 'id' | 'import_id' | 'import_price'> & { import_price?: number }; // import_price có thể chưa có khi request
 
 // ===========================================
 // == PHIẾU NHẬP KHO (IMPORTS) ==
 // ===========================================
 
 /**
- * Lấy danh sách phiếu nhập kho (phân trang) - [CẬP NHẬT] Thêm tên người thanh toán
+ * Lấy danh sách phiếu nhập kho (phân trang)
  */
 export const findAllImports = async (limit: number, offset: number) => {
     const query = `
-        SELECT
-            ii.*, s.name as supplier_name,
-            req_u.name as requested_by_name,
-            app_u.name as approved_by_name,
-            rec_u.name as received_by_name,
-            pay_u.name as paid_by_name -- <<--- THÊM TÊN NGƯỜI THANH TOÁN
+        SELECT ii.*, s.name as supplier_name,
+               req_u.name as requested_by_name,
+               app_u.name as approved_by_name,
+               rec_u.name as received_by_name
         FROM inventory_imports ii
         LEFT JOIN suppliers s ON ii.supplier_id = s.id
         LEFT JOIN users req_u ON ii.requested_by = req_u.id
         LEFT JOIN users app_u ON ii.approved_by = app_u.id
         LEFT JOIN users rec_u ON ii.received_by = rec_u.id
-        LEFT JOIN users pay_u ON ii.paid_by = pay_u.id -- <<--- JOIN THÊM BẢNG USERS CHO paid_by
-        ORDER BY ii.requested_at DESC NULLS LAST, ii.created_at DESC -- Sửa lại ORDER BY nếu cần
+        ORDER BY ii.requested_at DESC NULLS LAST, ii.id DESC
         LIMIT $1 OFFSET $2`;
     const result = await pool.query(query, [limit, offset]);
+    // Chuyển đổi total_amount sang number
     return result.rows.map(row => ({
         ...row,
         total_amount: row.total_amount ? parseFloat(row.total_amount) : null
@@ -45,22 +43,19 @@ export const countAllImports = async () => {
 
 
 /**
- * Tìm chi tiết phiếu nhập kho theo ID - [CẬP NHẬT] Thêm tên người thanh toán
+ * Tìm chi tiết phiếu nhập kho theo ID
  */
 export const findImportById = async (id: number) => {
     const importQuery = `
-        SELECT
-            ii.*, s.name as supplier_name,
-            req_u.name as requested_by_name,
-            app_u.name as approved_by_name,
-            rec_u.name as received_by_name,
-            pay_u.name as paid_by_name -- <<--- THÊM TÊN NGƯỜI THANH TOÁN
+        SELECT ii.*, s.name as supplier_name,
+               req_u.name as requested_by_name,
+               app_u.name as approved_by_name,
+               rec_u.name as received_by_name
         FROM inventory_imports ii
         LEFT JOIN suppliers s ON ii.supplier_id = s.id
         LEFT JOIN users req_u ON ii.requested_by = req_u.id
         LEFT JOIN users app_u ON ii.approved_by = app_u.id
         LEFT JOIN users rec_u ON ii.received_by = rec_u.id
-        LEFT JOIN users pay_u ON ii.paid_by = pay_u.id -- <<--- JOIN THÊM BẢNG USERS CHO paid_by
         WHERE ii.id = $1`;
     const importResult = await pool.query(importQuery, [id]);
     if (importResult.rows.length === 0) return null;
@@ -70,11 +65,12 @@ export const findImportById = async (id: number) => {
                p.name as product_name, p.images->>'thumbnail' as product_image,
                pv.name as variant_name, pv.sku, pv.image as variant_image
         FROM inventory_import_details iid
-        JOIN product_variants pv ON iid.variant_id = pv.id
-        JOIN products p ON pv.product_id = p.id
+        JOIN product_variants pv ON iid.variant_id = pv.id -- Use JOIN for variants
+        JOIN products p ON pv.product_id = p.id           -- Join products via variants
         WHERE iid.import_id = $1 ORDER BY p.name, pv.name`;
     const detailsResult = await pool.query(detailsQuery, [id]);
 
+    // Chuyển đổi giá và số lượng sang number
     const details = detailsResult.rows.map(d => ({
         ...d,
         import_quantity: parseInt(d.import_quantity, 10),
@@ -96,6 +92,8 @@ export const requestImport = async (importData: Pick<InventoryImport, 'import_co
     try {
         await client.query('BEGIN');
         const { import_code, note } = importData;
+
+        // Tạo phiếu nhập chính
         const importResult = await client.query(
             `INSERT INTO inventory_imports (import_code, note, status, requested_by, requested_at, payment_status)
              VALUES ($1, $2, 'requested', $3, NOW(), 'unpaid') RETURNING *`,
@@ -103,6 +101,7 @@ export const requestImport = async (importData: Pick<InventoryImport, 'import_co
         );
         const newImport = importResult.rows[0];
 
+        // Thêm chi tiết phiếu nhập (giá tạm thời là 0)
         const detailPromises = detailsData.map(detail => {
             if (!detail.variant_id || !detail.import_quantity || detail.import_quantity <= 0) {
                 throw new Error('Mỗi sản phẩm phải có variant_id và số lượng nhập hợp lệ (> 0).');
@@ -142,29 +141,39 @@ export const reviewImportRequest = async (
         if (currentResult.rows.length === 0) throw new Error('Không tìm thấy phiếu yêu cầu nhập kho.');
 
         const currentStatus = currentResult.rows[0].status;
+        const requesterId = currentResult.rows[0].requested_by;
+
         if (currentStatus !== 'requested') {
             throw new Error(`Phiếu đang ở trạng thái "${currentStatus}", không thể ${action}.`);
         }
 
         let newStatus: InventoryImport['status'];
         let message = '';
-        const actionNote = data.note || '';
+        const actionNote = data.note || ''; // Luôn đảm bảo actionNote là string
 
         if (action === 'cancel') {
             newStatus = 'cancelled';
             message = 'Đã hủy phiếu yêu cầu nhập kho.';
-            const finalNote = `Cancelled by User ${userId}: ${actionNote}`;
+            const finalNote = `Cancelled by User ${userId}: ${actionNote}`; // finalNote giờ là string
+
+            // [SỬA ĐỔI]: Dùng toán tử || và ::TEXT cho $2
             await client.query(
-                `UPDATE inventory_imports SET status = $1, notes = COALESCE(notes, '') || E'\\n' || $2::TEXT, updated_at = NOW() WHERE id = $3`,
-                [newStatus, finalNote, importId]
+                `UPDATE inventory_imports
+                 SET status = $1, notes = COALESCE(notes, '') || E'\\n' || $2::TEXT, updated_at = NOW()
+                 WHERE id = $3`,
+                [newStatus, finalNote, importId] // Tham số giữ nguyên
             );
         } else if (action === 'reject') {
             newStatus = 'rejected';
             message = 'Đã từ chối phiếu yêu cầu nhập kho.';
-            const finalNote = `Rejected by User ${userId}: ${actionNote}`;
+            const finalNote = `Rejected by User ${userId}: ${actionNote}`; // finalNote giờ là string
+
+            // [SỬA ĐỔI]: Dùng toán tử || và ::TEXT cho $2 (mặc dù $2 là note, nên ép kiểu luôn cho chắc)
             await client.query(
-                `UPDATE inventory_imports SET status = $1, notes = COALESCE(notes, '') || E'\\n' || $2::TEXT, approved_by = $3, approved_at = NOW(), updated_at = NOW() WHERE id = $4`,
-                [newStatus, finalNote, userId, importId]
+                `UPDATE inventory_imports
+                 SET status = $1, notes = COALESCE(notes, '') || E'\\n' || $2::TEXT, approved_by = $3, approved_at = NOW(), updated_at = NOW()
+                 WHERE id = $4`,
+                [newStatus, finalNote, userId, importId] // Tham số giữ nguyên
             );
         } else if (action === 'approve') {
             const { supplier_id, details } = data;
@@ -175,7 +184,7 @@ export const reviewImportRequest = async (
             let totalAmount = 0;
             const detailUpdatePromises = details.map(detail => {
                 if (detail.import_price < 0 || detail.import_quantity <= 0) {
-                    throw new Error(`Giá (${detail.import_price}) và số lượng (${detail.import_quantity}) không hợp lệ.`);
+                    throw new Error(`Giá (${detail.import_price}) và số lượng (${detail.import_quantity}) phải hợp lệ cho item ID ${detail.id}.`);
                 }
                 totalAmount += detail.import_quantity * detail.import_price;
                 return client.query(
@@ -187,7 +196,7 @@ export const reviewImportRequest = async (
 
             newStatus = 'approved';
             message = 'Đã phê duyệt phiếu yêu cầu nhập kho.';
-            const finalNote = `Approved by User ${userId}: ${actionNote}`;
+            const finalNote = `Approved by User ${userId}: ${actionNote}`; // finalNote giờ là string
             await client.query(
                 `UPDATE inventory_imports
                  SET status = $1, supplier_id = $2, approved_by = $3, approved_at = NOW(),
@@ -200,7 +209,6 @@ export const reviewImportRequest = async (
         }
 
         await client.query('COMMIT');
-        // Gọi lại findImportById để lấy dữ liệu mới nhất bao gồm cả tên người dùng
         const updatedImport = await findImportById(importId);
         return { success: true, message, importData: updatedImport || undefined };
     } catch (error) {
@@ -214,17 +222,14 @@ export const reviewImportRequest = async (
 
 
 /**
- * BƯỚC 3: Kế toán xác nhận đã thanh toán cho nhà cung cấp - [CẬP NHẬT] Lưu paid_by
+ * BƯỚC 3: Kế toán xác nhận đã thanh toán cho nhà cung cấp.
  */
 export const markAsPaid = async (importId: number, paidBy: number): Promise<boolean> => {
-    // Giả định bảng inventory_imports đã có cột paid_by BIGINT REFERENCES users(id)
     const result = await pool.query(
-        `UPDATE inventory_imports
-         SET payment_status = 'paid', paid_by = $2, updated_at = NOW()
-         WHERE id = $1 AND status IN ('approved', 'completed') AND payment_status = 'unpaid' -- Cho phép đánh dấu paid cả khi đã completed
-         RETURNING id`,
-        [importId, paidBy] // Truyền paidBy vào tham số $2
+        "UPDATE inventory_imports SET payment_status = 'paid', updated_at = NOW() WHERE id = $1 AND status = 'approved' AND payment_status = 'unpaid' RETURNING id",
+        [importId]
     );
+    // Ghi log hoặc history nếu cần
     return (result.rowCount ?? 0) > 0;
 };
 
@@ -237,14 +242,19 @@ export const receiveImport = async (importId: number, receivedBy: number): Promi
         await client.query('BEGIN');
         const currentResult = await client.query("SELECT status FROM inventory_imports WHERE id = $1 FOR UPDATE", [importId]);
         if (currentResult.rows.length === 0) throw new Error('Không tìm thấy phiếu nhập kho.');
+
         const currentStatus = currentResult.rows[0].status;
-        if (currentStatus !== 'approved' && currentStatus !== 'paid') { // Cho phép nhận cả khi đã paid
-            throw new Error(`Không thể nhận hàng cho phiếu đang ở trạng thái "${currentStatus}".`);
+        // Chỉ nhận hàng khi đã được duyệt (hoặc đã thanh toán tùy nghiệp vụ)
+        if (currentStatus !== 'approved' && currentStatus !== 'paid') {
+            throw new Error(`Không thể nhận hàng cho phiếu đang ở trạng thái "${currentStatus}". Phiếu cần được phê duyệt trước.`);
         }
 
         const detailsResult = await client.query("SELECT variant_id, import_quantity FROM inventory_import_details WHERE import_id = $1", [importId]);
-        if (detailsResult.rows.length === 0) throw new Error("Phiếu nhập kho không có chi tiết sản phẩm.");
+        if (detailsResult.rows.length === 0) {
+             throw new Error("Phiếu nhập kho không có chi tiết sản phẩm.");
+        }
 
+        // Cộng tồn kho cho từng sản phẩm vào kho tổng (branch_id = 0)
         const inventoryUpdatePromises = detailsResult.rows.map(detail =>
             client.query(
                 `INSERT INTO branch_inventories (branch_id, variant_id, quantity) VALUES (0, $1, $2)
@@ -254,6 +264,7 @@ export const receiveImport = async (importId: number, receivedBy: number): Promi
         );
         await Promise.all(inventoryUpdatePromises);
 
+        // Cập nhật trạng thái phiếu nhập thành 'completed'
         await client.query(
             "UPDATE inventory_imports SET status = 'completed', received_by = $1, received_at = NOW(), updated_at = NOW() WHERE id = $2",
             [receivedBy, importId]
@@ -279,19 +290,24 @@ export const rejectReceipt = async (importId: number, rejectedBy: number, reason
         await client.query('BEGIN');
         const currentResult = await client.query("SELECT status FROM inventory_imports WHERE id = $1 FOR UPDATE", [importId]);
         if (currentResult.rows.length === 0) throw new Error('Không tìm thấy phiếu nhập kho.');
+
         const currentStatus = currentResult.rows[0].status;
+        // Chỉ từ chối nhận hàng khi đã được duyệt (hoặc đã thanh toán)
         if (currentStatus !== 'approved' && currentStatus !== 'paid') {
             throw new Error(`Không thể từ chối nhận hàng cho phiếu đang ở trạng thái "${currentStatus}".`);
         }
 
+        // Cập nhật trạng thái phiếu nhập thành 'receipt_rejected'
         const finalNote = `Receipt Rejected by User ${rejectedBy}: ${reason}`;
         await client.query(
             `UPDATE inventory_imports
              SET status = 'receipt_rejected', received_by = $1, received_at = NOW(),
-                 notes = COALESCE(notes,'') || E'\\n' || $2::TEXT, updated_at = NOW()
+                 notes = CONCAT(COALESCE(notes,''), E'\\n', $2), updated_at = NOW()
              WHERE id = $3`,
             [rejectedBy, finalNote, importId]
         );
+
+        // KHÔNG CỘNG TỒN KHO KHI TỪ CHỐI NHẬN
 
         await client.query('COMMIT');
         return true;
