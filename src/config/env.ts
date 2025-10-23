@@ -36,6 +36,13 @@ const envSchema = z.object({
   VNP_IPN_URL: z.string().url(),
 
   FRONTEND_URL: z.string().url(),
+    // --- THÊM MOMO CONFIG ---
+  MOMO_PARTNER_CODE: z.string(),
+   MOMO_ACCESS_KEY: z.string(),
+    MOMO_SECRET_KEY: z.string(),
+    MOMO_API_ENDPOINT: z.string().url(),
+    MOMO_REDIRECT_URL: z.string().url(),
+    MOMO_IPN_URL: z.string().url(),
 });
 
 // Phân tích và xác thực các biến môi trường

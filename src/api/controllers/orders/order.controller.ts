@@ -8,10 +8,12 @@ import { ShippingService } from '../../services/shipping.service'; // Đảm b�
 import { VNPayService } from '../../services/vnpay.service'; // Đảm bảo đường dẫn đúng
 import { sendEmail } from '../../services/email.service'; // <<--- IMPORT HÀM GỬI EMAIL (Đảm bảo đường dẫn đúng)
 import axios from 'axios'; // Import axios để kiểm tra lỗi AxiosError
-
+import { v4 as uuidv4 } from 'uuid'; // <<--- IMPORT uuid
+import { MomoService } from '../../services/momo.service'; 
 // --- Khởi tạo các Service ---
 const shippingService = new ShippingService();
 const vnpayService = new VNPayService(); // Khởi tạo VNPayService
+const momoService = new MomoService(); // Khởi tạo MomoService
 
 // --- THÔNG TIN CỬA HÀNG/KHO HÀNG ---
 // **QUAN TRỌNG**: Thay bằng thông tin thật của bạn
@@ -36,6 +38,7 @@ export const placeOrder = async (req: Request, res: Response, next: NextFunction
     let orderItemsForEmail: any[] = []; // Biến lưu items cho email
     let shipmentResultForEmail: any = null; // Biến lưu kết quả GHN cho email
     let customerNameForEmail: string | undefined | null = null; // Biến lưu tên khách hàng
+    let paymentUrl: string | null = null; // Khai báo paymentUrl ở đây
 
     try {
         const user = req.user as User; // Lấy thông tin user đang đăng nhập
@@ -59,11 +62,12 @@ export const placeOrder = async (req: Request, res: Response, next: NextFunction
         if (!addressId || !shippingOption || typeof shippingOption.fee !== 'number' || typeof shippingOption.service_id !== 'number' || typeof shippingOption.service_type_id !== 'number' || !paymentMethod) {
             return res.status(400).json({ message: 'Dữ liệu đặt hàng không hợp lệ. Vui lòng kiểm tra addressId, shippingOption (fee, service_id, service_type_id), paymentMethod.' });
         }
+        const lowerPaymentMethod = paymentMethod.toLowerCase(); // Chuyển thành chữ thường để so sánh
 
         await client.query('BEGIN'); // Bắt đầu Transaction
 
         // 1. TẠO ĐƠN HÀNG TRONG DATABASE
-        const orderDataForModel = { addressId, shippingOption, paymentMethod, notes };
+        const orderDataForModel = { addressId, shippingOption, paymentMethod: lowerPaymentMethod, notes }; // Lưu PTTT chữ thường
         const { newOrder: createdOrder, orderItems, shippingAddress, totalWeight, totalAmount } = await OrderModel.placeOrder(customer.id, orderDataForModel, client);
         newOrder = createdOrder;
         orderItemsForEmail = orderItems; // Lưu items để dùng cho email
@@ -97,7 +101,7 @@ export const placeOrder = async (req: Request, res: Response, next: NextFunction
             service_id: shippingOption.service_id,
             service_type_id: shippingOption.service_type_id,
             payment_type_id: 2, // 2: Người mua/nhận trả phí vận chuyển
-            cod_amount: paymentMethod.toLowerCase() === 'cod' ? Math.round(totalAmount) : 0, // Tiền thu hộ (nếu là COD)
+            cod_amount: lowerPaymentMethod === 'cod' ? Math.round(totalAmount) : 0, // Tiền thu hộ (nếu là COD)
             required_note: "CHOXEMHANGKHONGTHU", // Yêu cầu khi giao
             note: notes || "", // Ghi chú của khách hàng
             client_order_code: newOrder.order_number, // Mã đơn hàng của bạn để đối soát
@@ -133,15 +137,17 @@ export const placeOrder = async (req: Request, res: Response, next: NextFunction
             ]
         );
 
-        // 5. TẠO BẢN GHI THANH TOÁN & URL VNPay (nếu cần)
-        let paymentUrl: string | null = null;
-        if (newOrder.payment_method?.toLowerCase() === 'vnpay') { // Thêm ?. để an toàn
-            const ipAddr = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1'; // Lấy IP, fallback về localhost nếu không có
-            paymentUrl = vnpayService.createPaymentUrl(newOrder, totalAmount, ipAddr as string);
-            // Tạo bản ghi payment pending
+        // 5. TẠO BẢN GHI THANH TOÁN & URL THANH TOÁN ONLINE
+        if (lowerPaymentMethod === 'vnpay') {
+            const ipAddr = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+            paymentUrl = await vnpayService.createPaymentUrl(newOrder, totalAmount, ipAddr as string);
             await client.query(`INSERT INTO payments (order_id, payment_method, amount, status, gateway) VALUES ($1, 'vnpay', $2, 'pending', 'VNPay')`, [newOrder.id, totalAmount]);
+        } else if (lowerPaymentMethod === 'momo') { // <<--- LOGIC MOMO
+            const requestId = uuidv4(); // Tạo requestId duy nhất
+            paymentUrl = await momoService.createPaymentRequest(newOrder, totalAmount, requestId);
+            // Lưu requestId vào payments nếu cần đối soát? Tùy chọn.
+            await client.query(`INSERT INTO payments (order_id, payment_method, amount, status, gateway, notes) VALUES ($1, 'momo', $2, 'pending', 'Momo', $3)`, [newOrder.id, totalAmount, `requestId: ${requestId}`]);
         } else { // COD
-            // Tạo bản ghi payment pending cho COD
             await client.query(`INSERT INTO payments (order_id, payment_method, amount, status) VALUES ($1, 'cod', $2, 'pending')`, [newOrder.id, totalAmount]);
         }
 
@@ -234,7 +240,7 @@ export const placeOrder = async (req: Request, res: Response, next: NextFunction
                 fee: shipmentResultForEmail?.total_fee,
                 expected_delivery_time: shipmentResultForEmail?.expected_delivery_time
             },
-            paymentUrl: paymentUrl, // Gửi URL về frontend để redirect nếu là VNPay
+            paymentUrl: paymentUrl, // Gửi URL về frontend để redirect nếu là VNPay/MoMo
         });
 
     } catch (error) {
@@ -254,13 +260,14 @@ export const placeOrder = async (req: Request, res: Response, next: NextFunction
 
         // Phản hồi lỗi cho client
         if (axios.isAxiosError(error) && error.response?.data?.message) {
-             return res.status(400).json({ message: `Lỗi từ GHN: ${error.response.data.message}` });
+             // Lỗi từ GHN hoặc MoMo (nếu axios được dùng trong momoService)
+             return res.status(400).json({ message: `Lỗi từ cổng thanh toán/vận chuyển: ${error.response.data.message}` });
         }
         if (error instanceof Error) {
+             // Lỗi nghiệp vụ (vd: hết hàng, sai địa chỉ)
              return res.status(400).json({ message: error.message });
         }
         // Chuyển lỗi không xác định cho middleware xử lý lỗi chung
-        // Đảm bảo bạn có middleware xử lý lỗi ở cuối app.ts/server.ts
         next(error);
     } finally {
         if (client) client.release(); // Luôn trả kết nối về pool
