@@ -320,35 +320,97 @@ export const findOrdersByCustomerId = async (customerId: number): Promise<Order[
  * Finds detailed information for a single order.
  */
 export const findOrderDetailsById = async (orderId: number): Promise<(Order & { items: any[], history: any[], shipment: any, payments: any[] }) | null> => {
-    // SELECT * automatically includes the renamed/new columns
+    // 1. Fetch main order data
     const orderPromise = pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
-    const itemsPromise = pool.query( /* ... items query ... */
-        `SELECT oi.*, COALESCE(pv.image, p.images->>'thumbnail') as image
-         FROM order_items oi LEFT JOIN product_variants pv ON oi.variant_id = pv.id
-         LEFT JOIN products p ON pv.product_id = p.id
-         WHERE oi.order_id = $1 ORDER BY oi.id ASC`, [orderId]
+
+    // 2. Fetch order items and JOIN with product_variants and products for current variant details
+    const itemsPromise = pool.query(
+        `SELECT
+            oi.id, oi.order_id, oi.product_id, oi.variant_id,
+            oi.product_name, oi.product_sku, oi.quantity, oi.unit_price, -- Data from order_items
+            COALESCE(pv.image, p.images->>'thumbnail') as image, -- Resolved image
+            -- Additional current variant data <<--- THÊM CÁC TRƯỜNG VARIANT
+            pv.sku as variant_sku,
+            pv.name as variant_name,
+            pv.weight,
+            pv.length,
+            pv.width,
+            pv.height
+         FROM order_items oi
+         LEFT JOIN product_variants pv ON oi.variant_id = pv.id
+         LEFT JOIN products p ON oi.product_id = p.id -- Join product mainly for fallback image
+         WHERE oi.order_id = $1 ORDER BY oi.id ASC`,
+        [orderId]
     );
-    const historyPromise = pool.query( /* ... history query ... */
+
+    // 3. Fetch order status history with user names
+    const historyPromise = pool.query(
         `SELECT h.*, u.name as changed_by_name
-         FROM order_status_histories h LEFT JOIN users u ON h.changed_by = u.id
-         WHERE h.order_id = $1 ORDER BY h.created_at ASC`, [orderId]
+         FROM order_status_histories h
+         LEFT JOIN users u ON h.changed_by = u.id
+         WHERE h.order_id = $1 ORDER BY h.created_at ASC`,
+        [orderId]
     );
+
+    // 4. Fetch shipment information
     const shipmentPromise = pool.query('SELECT * FROM shipments WHERE order_id = $1', [orderId]);
+
+    // 5. Fetch payment information
     const paymentPromise = pool.query('SELECT * FROM payments WHERE order_id = $1', [orderId]);
 
-    const [orderResult, itemsResult, historyResult, shipmentResult, paymentResult] = await Promise.all([
-        orderPromise, itemsPromise, historyPromise, shipmentPromise, paymentPromise
+    // Execute all queries in parallel
+    const [
+        orderResult,
+        itemsResult,
+        historyResult,
+        shipmentResult,
+        paymentResult
+    ] = await Promise.all([
+        orderPromise,
+        itemsPromise,
+        historyPromise,
+        shipmentPromise,
+        paymentPromise
     ]);
 
-    if (orderResult.rows.length === 0) return null;
+    // If order not found, return null
+    if (orderResult.rows.length === 0) {
+        return null;
+    }
 
-    // The result from SELECT * already has the correct column names
-    // recipient_name, recipient_phone, account_customer_name, account_customer_phone
+    // Process items: parse numbers and include new variant fields
+    const items = itemsResult.rows.map(item => ({
+        // Keep original order_item fields
+        id: item.id,
+        order_id: item.order_id,
+        product_id: item.product_id,
+        variant_id: item.variant_id,
+        product_name: item.product_name,
+        product_sku: item.product_sku,
+        quantity: parseInt(item.quantity, 10),
+        unit_price: parseFloat(item.unit_price),
+        image: item.image,
+        // Add the new variant fields <<--- THÊM VÀO KẾT QUẢ TRẢ VỀ
+        variant_sku: item.variant_sku,
+        variant_name: item.variant_name,
+        weight: item.weight ? parseFloat(item.weight) : null,
+        length: item.length ? parseFloat(item.length) : null,
+        width: item.width ? parseFloat(item.width) : null,
+        height: item.height ? parseFloat(item.height) : null,
+    }));
+
+     // Process payments: parse amount
+     const payments = paymentResult.rows.map(p => ({
+        ...p,
+        amount: parseFloat(p.amount)
+    }));
+
+    // Combine results
     return {
-        ...orderResult.rows[0],
-        items: itemsResult.rows.map(item => ({...item, unit_price: parseFloat(item.unit_price)})),
+        ...orderResult.rows[0], // Spread the main order data
+        items: items, // Include the enriched items array
         history: historyResult.rows,
         shipment: shipmentResult.rows[0] || null,
-        payments: paymentResult.rows.map(p => ({...p, amount: parseFloat(p.amount)}))
+        payments: payments
     };
 };
