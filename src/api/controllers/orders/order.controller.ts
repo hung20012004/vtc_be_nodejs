@@ -329,6 +329,9 @@ export const getMyOrderDetails = async (req: Request, res: Response, next: NextF
 /**
  * @description Admin xem tất cả đơn hàng trong hệ thống (có phân trang/lọc).
  */
+/**
+ * @description Admin xem tất cả đơn hàng trong hệ thống (có phân trang/lọc).
+ */
 export const getAllOrders = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const page = parseInt(req.query.page as string) || 1;
@@ -336,13 +339,20 @@ export const getAllOrders = async (req: Request, res: Response, next: NextFuncti
         const offset = (page - 1) * limit;
 
         const { status, search } = req.query;
+
+        // --- [SỬA ĐỔI SQL QUERY] ---
         let query = `
             SELECT o.id, o.order_number, o.order_date, o.order_status, o.total_amount,
-                   o.customer_name, o.customer_phone, o.payment_method, o.payment_status,
-                   c.name as customer_real_name
+                   o.recipient_name,  -- <<< Sửa thành recipient_name
+                   o.recipient_phone, -- <<< Sửa thành recipient_phone (tên cột đã đổi)
+                   o.payment_method, o.payment_status,
+                   o.account_customer_name, -- Lấy thêm tên chủ tài khoản
+                   c.name as customer_real_name -- Tên từ bảng customers (nếu cần đối chiếu)
             FROM orders o
             LEFT JOIN customers c ON o.customer_id = c.id
         `;
+        // --- [KẾT THÚC SỬA ĐỔI SQL QUERY] ---
+
         const params: any[] = [];
         let whereClauses: string[] = [];
 
@@ -351,11 +361,17 @@ export const getAllOrders = async (req: Request, res: Response, next: NextFuncti
             whereClauses.push(`o.order_status = $${params.length}`);
         }
         if (search) {
-             params.push(`%${String(search).toLowerCase()}%`); // Chuyển search thành string và lowercase
+             params.push(`%${String(search).toLowerCase()}%`);
              const searchParamIndex = params.length;
+             // --- [SỬA ĐỔI SEARCH CONDITION] ---
              whereClauses.push(
-               `(LOWER(o.order_number) ILIKE $${searchParamIndex} OR LOWER(o.customer_name) ILIKE $${searchParamIndex} OR o.customer_phone ILIKE $${searchParamIndex})`
+                 `(LOWER(o.order_number) ILIKE $${searchParamIndex}
+                    OR LOWER(o.recipient_name) ILIKE $${searchParamIndex}  -- <<< Sửa thành recipient_name
+                    OR o.recipient_phone ILIKE $${searchParamIndex}       -- <<< Sửa thành recipient_phone
+                    OR LOWER(o.account_customer_name) ILIKE $${searchParamIndex} -- Thêm tìm kiếm theo tên chủ TK
+                   )`
              );
+             // --- [KẾT THÚC SỬA ĐỔI SEARCH CONDITION] ---
         }
 
         if (whereClauses.length > 0) {
@@ -367,19 +383,38 @@ export const getAllOrders = async (req: Request, res: Response, next: NextFuncti
 
         const result = await pool.query(query, params);
 
-        let countQuery = `SELECT COUNT(*) FROM orders o`;
-        let countParams: any[] = [];
-        if (whereClauses.length > 0) {
-             countQuery += ' WHERE ' + whereClauses.join(' AND ');
-             countParams = params.slice(0, params.length - 2);
+        // --- Sửa countQuery tương tự ---
+        let countQuery = `SELECT COUNT(*) FROM orders o`; // Bỏ join customers nếu không filter theo customer_real_name
+         let countParams: any[] = [];
+        // Tái sử dụng whereClauses đã tạo ở trên, nhưng cần đảm bảo param index đúng
+        let countWhereClauses: string[] = [];
+        if (status) {
+            countParams.push(status as string);
+            countWhereClauses.push(`o.order_status = $${countParams.length}`);
         }
-        const totalResult = await pool.query(countQuery, countParams);
+         if (search) {
+             countParams.push(`%${String(search).toLowerCase()}%`);
+             const searchParamIndex = countParams.length;
+             countWhereClauses.push(
+                 `(LOWER(o.order_number) ILIKE $${searchParamIndex}
+                    OR LOWER(o.recipient_name) ILIKE $${searchParamIndex}
+                    OR o.recipient_phone ILIKE $${searchParamIndex}
+                    OR LOWER(o.account_customer_name) ILIKE $${searchParamIndex})`
+             );
+         }
+
+        if (countWhereClauses.length > 0) {
+            countQuery += ' WHERE ' + countWhereClauses.join(' AND ');
+        }
+        // --- Kết thúc sửa countQuery ---
+
+        const totalResult = await pool.query(countQuery, countParams); // Dùng countParams
         const totalOrders = parseInt(totalResult.rows[0].count, 10);
 
         res.status(200).json({
             data: result.rows.map(row => ({
                 ...row,
-                total_amount: parseFloat(row.total_amount) // Chuyển đổi amount
+                total_amount: parseFloat(row.total_amount)
             })),
             pagination: {
                 currentPage: page,
@@ -390,10 +425,14 @@ export const getAllOrders = async (req: Request, res: Response, next: NextFuncti
         });
     } catch(error) {
         console.error("Get All Orders error:", error);
-        next(error); // Chuyển lỗi cho middleware xử lý lỗi chung
+        // Chuyển lỗi với thông tin rõ ràng hơn nếu có thể
+        if (error instanceof Error && error.message.includes('column "o.customer_name" does not exist')) {
+             next(new Error('Lỗi truy vấn dữ liệu đơn hàng do thay đổi cấu trúc bảng. Vui lòng kiểm tra lại controller.'));
+        } else {
+             next(error);
+        }
     }
 };
-
 /**
  * @description Admin xem chi tiết một đơn hàng bất kỳ, bao gồm items, history, shipment, payments.
  */
