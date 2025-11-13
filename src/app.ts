@@ -41,6 +41,7 @@ import tagRouter from './api/routes/settings/tag.route';
 import postCategoryRouter from './api/routes/posts/postCategory.route';
 import staffRouter from './api/routes/authentication/staff.route';
 import profileRouter from './api/routes/authentication/profile.route';
+import PaymentRouter from './api/routes/orders/payment.route';
 const app = express();
 
 app.use(cors({
@@ -92,6 +93,7 @@ app.use('/api/v1/post-categories', postCategoryRouter);
 app.use('/api/v1/staff', staffRouter);
 app.use('/api/v1/profile', profileRouter);
 app.use('/api/v1/reports', reportRouter);
+app.use('/api/v1/payments', PaymentRouter);
 app.get('/', (req, res) => {
   res.send('Server is alive and kicking!');
 });

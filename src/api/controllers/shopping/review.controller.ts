@@ -2,6 +2,8 @@
 import { Request, Response, NextFunction } from 'express';
 import * as ReviewModel from '../../models/shopping/review.model';
 import { User } from '../../types/authentication/user.type';
+import * as CustomerModel from '../../models/authentication/customer.model';
+import { findCustomerByUserId } from '../../models/authentication/customer.model';
 
 // Public: Lấy review cho trang sản phẩm
 export const getProductReviews = async (req: Request, res: Response, next: NextFunction) => {
@@ -17,7 +19,8 @@ export const submitReview = async (req: Request, res: Response, next: NextFuncti
     try {
         const user = req.user as User; // Giả sử user.id là customer_id
         const productId = parseInt(req.params.productId, 10);
-        const newReview = await ReviewModel.create({ ...req.body, customer_id: user.id, product_id: productId });
+        const customer = await CustomerModel.findCustomerByUserId(user.id);
+        const newReview = await ReviewModel.create({ ...req.body, customer_id: customer?.id, product_id: productId });
         res.status(201).json({ message: 'Gửi đánh giá thành công. Đánh giá của bạn đang chờ duyệt.', data: newReview });
     } catch (error) {
         if (error instanceof Error) {

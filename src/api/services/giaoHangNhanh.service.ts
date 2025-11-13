@@ -69,7 +69,7 @@ export class GiaoHangNhanhService implements IShippingProvider {
             // You should make the 'from' details configurable or load from DB
             from_name: "FruitApp Shop",
             from_phone: "0393337820",
-            from_address: "123 Đường ABC",
+            from_address: "Số 200 Dịch Vọng Hậu, Cầu Giấy, Hà Nội",
             from_ward_code: "1A0601", // Example, ensure this is correct
             from_district_id: 1485,  // Example, ensure this is correct
         };
